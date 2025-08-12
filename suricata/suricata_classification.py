@@ -43,4 +43,5 @@ def meu_callback(flow_data):
 def print_flow(flow_data):
     teste = flow_data
 
-follow_flows(eve_log_path, meu_callback, test=sys.argv[1])
+test_arg = sys.argv[1] if len(sys.argv) > 1 else '0'
+follow_flows(eve_log_path, meu_callback, test=test_arg)

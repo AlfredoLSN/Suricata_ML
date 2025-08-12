@@ -120,7 +120,7 @@ flow_data_test = [
     dict(zip(flow_data_test_keys, values)) for values in flow_data_test_values
 ]
 
-def follow_flows(eve_log_path, on_flow, test = 0):
+def follow_flows(eve_log_path, on_flow, test = '0'):
     if test == '0':
         with open(eve_log_path, 'r') as f:
             for line in follow(f):
