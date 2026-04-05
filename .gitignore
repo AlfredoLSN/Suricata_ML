@@ -209,3 +209,6 @@ __marimo__/
 
 suricata_flows.csv
 modelo
+
+# Capture module artifacts
+data/raw/captures/*.csv

@@ -16,6 +16,8 @@ Projeto para análise de dados de IDS (Intrusion Detection System), integrando S
 - `variables.py`: Definição das features e arquivos utilizados.
 - `suricata/extract_flows.py` e `extract_flows2.py`: Extração de fluxos e features dos logs do Suricata.
 - `suricata/suricata_classification.py`: Classificação dos fluxos em tempo real e envio de alertas.
+- `src/capture/traffic_capture.py`: Captura modular com cicflowmeter por 60 segundos e validação visual do CSV.
+- `.env.example`: Variáveis de ambiente obrigatórias para execução em diferentes máquinas.
 - `requirements.txt`: Lista de dependências do projeto.
 - `main.ipynb`: Notebook para experimentação e análise.
 
@@ -54,6 +56,37 @@ Após o treinamento, a classificação dos fluxos de rede e o envio de alertas s
 ```bash
 python suricata/suricata_classification.py
 ```
+
+## Captura Isolada com Cicflowmeter
+
+Este fluxo executa apenas a captura e validação do CSV, sem integração com Suricata e sem inferência de Machine Learning.
+
+### 1) Configuração de ambiente
+
+Crie um `.env` na raiz do projeto com base no `.env.example`:
+
+```bash
+CICFLOWMETER_PATH=/home/user/cicflowmeter/.venv/bin/cicflowmeter
+NETWORK_INTERFACE=eth0
+CAPTURE_OUTPUT_DIR=data/raw/captures
+```
+
+### 2) Executar captura por 60 segundos
+
+```bash
+python src/capture/traffic_capture.py
+```
+
+O script executa o cicflowmeter com `sudo`, aguarda 60 segundos, envia `SIGINT` para encerramento seguro e valida o CSV gerado com `pandas` (incluindo tratamento de nulos com `fillna(0)`).
+
+### 3) Saída esperada
+
+- CSV em `data/raw/captures/` com timestamp no nome.
+- Impressão das colunas extraídas e das 5 primeiras linhas no terminal.
+
+### Observação sobre privilégios
+
+A captura em interface de rede exige permissões administrativas. Se necessário, rode `sudo -v` antes para evitar interrupção por prompt de senha durante a execução.
 
 ## Principais Dependências
 
