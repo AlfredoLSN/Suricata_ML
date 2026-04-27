@@ -16,7 +16,7 @@ Projeto para análise de dados de IDS (Intrusion Detection System), integrando S
 - `variables.py`: Definição das features e arquivos utilizados.
 - `suricata/extract_flows.py` e `extract_flows2.py`: Extração de fluxos e features dos logs do Suricata.
 - `suricata/suricata_classification.py`: Classificação dos fluxos em tempo real e envio de alertas.
-- `src/capture/traffic_capture.py`: Captura modular com cicflowmeter por 60 segundos e validação visual do CSV.
+- `src/capture/traffic_capture.py`: Captura continua com tcpdump e rotacao nativa de arquivos PCAP a cada 60 segundos.
 - `.env.example`: Variáveis de ambiente obrigatórias para execução em diferentes máquinas.
 - `requirements.txt`: Lista de dependências do projeto.
 - `main.ipynb`: Notebook para experimentação e análise.
@@ -57,40 +57,39 @@ Após o treinamento, a classificação dos fluxos de rede e o envio de alertas s
 python suricata/suricata_classification.py
 ```
 
-## Captura Isolada com Cicflowmeter
+## Captura Continua com Tcpdump
 
-Este fluxo executa apenas a captura e validação do CSV, sem integração com Suricata e sem inferência de Machine Learning.
+Este fluxo executa apenas a captura bruta de pacotes em arquivos PCAP, sem integração com Suricata e sem inferência de Machine Learning.
 
 ### 1) Configuração de ambiente
 
 Crie um `.env` na raiz do projeto com base no `.env.example`:
 
 ```bash
-CICFLOWMETER_PATH=/home/user/cicflowmeter/.venv/bin/cicflowmeter
 NETWORK_INTERFACE=eth0
 CAPTURE_OUTPUT_DIR=data/raw/captures
 ```
 
-### 2) Executar captura por 60 segundos
+### 2) Executar captura continua
 
 ```bash
 python src/capture/traffic_capture.py
 ```
 
-O script executa o cicflowmeter com `sudo`, aguarda 60 segundos, envia `SIGINT` para encerramento seguro e valida o CSV gerado com `pandas` (incluindo tratamento de nulos com `fillna(0)`).
+O script executa o `tcpdump` com `sudo` e o mantem ativo ate o usuario pressionar `Ctrl+C`. A rotacao dos arquivos e feita pelo proprio `tcpdump` a cada 60 segundos com `-G 60`, gerando arquivos `.pcap` com timestamp no nome.
 
 ### 3) Saída esperada
 
-- CSV em `data/raw/captures/` com timestamp no nome.
-- Impressão das colunas extraídas e das 5 primeiras linhas no terminal.
+- Arquivos PCAP em `data/raw/captures/` com timestamp no nome.
+- Encerramento seguro do processo filho do `tcpdump` ao pressionar `Ctrl+C`, preservando o ultimo arquivo gerado.
 
 ### Observação sobre privilégios
 
-A captura em interface de rede exige permissões administrativas. Se necessário, rode `sudo -v` antes para evitar interrupção por prompt de senha durante a execução.
+A captura em interface de rede exige `tcpdump` instalado e permissões administrativas. Se necessário, rode `sudo -v` antes para evitar interrupção por prompt de senha durante a execução.
 
 ## Principais Dependências
 
-- pandas, numpy, scikit-learn, joblib, requests, cicflowmeter, seaborn, matplotlib, polars, imbalanced-learn, kagglehub
+- pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub
 
 Veja `requirements.txt` para a lista completa.
 

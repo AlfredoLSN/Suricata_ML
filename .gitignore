@@ -212,3 +212,5 @@ modelo
 
 # Capture module artifacts
 data/raw/captures/*.csv
+
+.codex

@@ -4,23 +4,24 @@ import os
 import signal
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 from dotenv import load_dotenv
 
-CAPTURE_DURATION_SECONDS = 60
+ROTATION_SECONDS = 60
 SHUTDOWN_TIMEOUT_SECONDS = 20
+FORCED_SHUTDOWN_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)
 class CaptureSettings:
-    cicflowmeter_path: Path
     network_interface: str
     output_dir: Path
+
+
+class ShutdownRequested(Exception):
+    pass
 
 
 def info(message: str) -> None:
@@ -41,26 +42,11 @@ def load_settings() -> CaptureSettings:
 
     load_dotenv(dotenv_path=env_path)
 
-    cicflowmeter_raw = os.getenv("CICFLOWMETER_PATH", "").strip()
     network_interface = os.getenv("NETWORK_INTERFACE", "").strip()
     output_dir_raw = os.getenv("CAPTURE_OUTPUT_DIR", "data/raw/captures").strip()
 
-    if not cicflowmeter_raw:
-        raise ValueError("A variavel CICFLOWMETER_PATH nao foi definida no .env.")
     if not network_interface:
         raise ValueError("A variavel NETWORK_INTERFACE nao foi definida no .env.")
-
-    cicflowmeter_path = Path(cicflowmeter_raw)
-    if not cicflowmeter_path.is_absolute():
-        raise ValueError("CICFLOWMETER_PATH deve ser um caminho absoluto.")
-    if not cicflowmeter_path.exists():
-        raise FileNotFoundError(
-            f"Caminho CICFLOWMETER_PATH nao encontrado: {cicflowmeter_path}"
-        )
-    if not os.access(cicflowmeter_path, os.X_OK):
-        raise PermissionError(
-            f"CICFLOWMETER_PATH nao e executavel: {cicflowmeter_path}"
-        )
 
     output_dir = Path(output_dir_raw)
     if not output_dir.is_absolute():
@@ -68,108 +54,92 @@ def load_settings() -> CaptureSettings:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return CaptureSettings(
-        cicflowmeter_path=cicflowmeter_path,
         network_interface=network_interface,
         output_dir=output_dir,
     )
 
 
-def build_output_csv_path(output_dir: Path) -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return output_dir / f"flows_{timestamp}.csv"
+def build_output_pcap_pattern(output_dir: Path) -> Path:
+    return output_dir / "capture_%Y%m%d_%H%M%S.pcap"
 
 
-def build_capture_command(settings: CaptureSettings, output_csv: Path) -> list[str]:
+def build_capture_command(settings: CaptureSettings) -> list[str]:
     return [
         "sudo",
-        str(settings.cicflowmeter_path),
+        "tcpdump",
         "-i",
         settings.network_interface,
-        "-c",
-        str(output_csv),
+        "-nn",
+        "-s",
+        "0",
+        "-G",
+        str(ROTATION_SECONDS),
+        "-w",
+        str(build_output_pcap_pattern(settings.output_dir)),
     ]
 
 
-def run_capture_for_60_seconds(settings: CaptureSettings) -> Path:
-    output_csv = build_output_csv_path(settings.output_dir)
-    command = build_capture_command(settings, output_csv)
+def request_shutdown(signum: int, _frame: object) -> None:
+    signal_name = signal.Signals(signum).name
+    raise ShutdownRequested(f"Sinal recebido: {signal_name}")
 
-    info(f"Iniciando captura na interface {settings.network_interface}...")
-    info(f"Arquivo de saida: {output_csv}")
-    info(f"Comando: {' '.join(command)}")
 
-    process = subprocess.Popen(command)
-
+def terminate_tcpdump(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
-        raise RuntimeError(
-            "O processo do cicflowmeter encerrou imediatamente apos iniciar."
-        )
+        return
 
-    start_time = time.monotonic()
-    end_time = start_time + CAPTURE_DURATION_SECONDS
-    while True:
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"O cicflowmeter encerrou antes do tempo esperado com codigo {process.returncode}."
-            )
-
-        remaining = end_time - time.monotonic()
-        if remaining <= 0:
-            break
-
-        time.sleep(min(1.0, remaining))
-
-    if process.poll() is None:
-        # Envia Ctrl+C para encerrar e finalizar o CSV sem corrupcao.
-        info("Tempo de captura concluido (60s). Enviando SIGINT...")
-        process.send_signal(signal.SIGINT)
+    info("Interrupcao recebida. Encerrando tcpdump com SIGINT...")
+    try:
+        os.killpg(process.pid, signal.SIGINT)
+    except ProcessLookupError:
+        return
 
     try:
         process.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         error("Encerramento gracioso excedeu timeout. Forcando finalizacao...")
-        process.kill()
-        process.wait(timeout=5)
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=FORCED_SHUTDOWN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            error("Finalizacao por SIGTERM excedeu timeout. Enviando SIGKILL...")
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
 
-    if process.returncode not in (0, 130):
-        raise RuntimeError(
-            f"Cicflowmeter encerrou com codigo inesperado: {process.returncode}"
-        )
 
-    if not output_csv.exists():
-        raise FileNotFoundError(
-            f"CSV de captura nao encontrado apos encerramento: {output_csv}"
-        )
+def run_capture_until_interrupted(settings: CaptureSettings) -> None:
+    command = build_capture_command(settings)
+    output_pattern = build_output_pcap_pattern(settings.output_dir)
+
+    info(f"Iniciando captura continua na interface {settings.network_interface}...")
+    info(f"Rotacao nativa do tcpdump: {ROTATION_SECONDS}s")
+    info(f"Padrao de saida: {output_pattern}")
+    info(f"Comando: {' '.join(command)}")
+    info("Pressione Ctrl+C para finalizar com seguranca.")
+
+    previous_sigterm_handler = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, request_shutdown)
+
+    process = subprocess.Popen(command)
+
+    try:
+        return_code = process.wait()
+    except (KeyboardInterrupt, ShutdownRequested):
+        terminate_tcpdump(process)
+        return_code = process.returncode
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm_handler)
+
+    if return_code not in (0, 130, -signal.SIGINT):
+        raise RuntimeError(f"Tcpdump encerrou com codigo inesperado: {return_code}")
 
     info("Captura finalizada com sucesso.")
-    return output_csv
-
-
-def validate_captured_csv(csv_path: Path) -> pd.DataFrame:
-    info(f"Validando CSV gerado: {csv_path}")
-    dataframe = pd.read_csv(csv_path)
-
-    null_count = int(dataframe.isna().sum().sum())
-    if null_count > 0:
-        info(f"Foram encontrados {null_count} valores nulos. Aplicando fillna(0)...")
-        dataframe = dataframe.fillna(0)
-    else:
-        info("Nenhum valor nulo encontrado no CSV.")
-
-    info("Colunas extraidas (features):")
-    print(list(dataframe.columns))
-
-    info("Primeiras 5 linhas do CSV:")
-    print(dataframe.head())
-
-    return dataframe
 
 
 def main() -> None:
     try:
         settings = load_settings()
-        output_csv = run_capture_for_60_seconds(settings)
-        validate_captured_csv(output_csv)
+        run_capture_until_interrupted(settings)
     except Exception as exc:
         error(str(exc))
         sys.exit(1)
