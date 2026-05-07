@@ -214,3 +214,7 @@ modelo
 data/raw/captures/*.csv
 
 .codex
+
+
+*.csv
+*.pcap

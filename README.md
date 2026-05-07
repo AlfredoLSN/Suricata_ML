@@ -17,6 +17,7 @@ Projeto para análise de dados de IDS (Intrusion Detection System), integrando S
 - `suricata/extract_flows.py` e `extract_flows2.py`: Extração de fluxos e features dos logs do Suricata.
 - `suricata/suricata_classification.py`: Classificação dos fluxos em tempo real e envio de alertas.
 - `src/capture/traffic_capture.py`: Captura continua com tcpdump e rotacao nativa de arquivos PCAP a cada 60 segundos.
+- `src/capture/flow_extraction_service.py`: Servico observador que processa PCAPs finalizados com CICFlowMeter e gera CSVs de features.
 - `.env.example`: Variáveis de ambiente obrigatórias para execução em diferentes máquinas.
 - `requirements.txt`: Lista de dependências do projeto.
 - `main.ipynb`: Notebook para experimentação e análise.
@@ -68,6 +69,10 @@ Crie um `.env` na raiz do projeto com base no `.env.example`:
 ```bash
 NETWORK_INTERFACE=eth0
 CAPTURE_OUTPUT_DIR=data/raw/captures
+FLOW_OUTPUT_DIR=data/processed/flows
+FLOW_WORKER_COUNT=1
+CICFLOWMETER_BIN=cicflowmeter
+CICFLOWMETER_CWD=
 ```
 
 ### 2) Executar captura continua
@@ -87,9 +92,47 @@ O script executa o `tcpdump` com `sudo` e o mantem ativo ate o usuario pressiona
 
 A captura em interface de rede exige `tcpdump` instalado e permissões administrativas. Se necessário, rode `sudo -v` antes para evitar interrupção por prompt de senha durante a execução.
 
+## Extração de Features com CICFlowMeter
+
+Este servico roda em paralelo com a captura continua. Ele observa `data/raw/captures/` com `watchdog`, publica apenas eventos de fechamento de arquivos `.pcap` em uma fila interna e deixa workers separados executarem o CICFlowMeter sem bloquear o observador.
+
+### 1) Requisitos
+
+- Instale as dependencias Python com `pip install -r requirements.txt`.
+- Instale o CICFlowMeter separadamente e confirme que o comando `cicflowmeter` esta disponivel no terminal, ou configure `CICFLOWMETER_BIN` com o caminho do executavel.
+- Se o CICFlowMeter precisar ser executado a partir de um diretorio especifico, configure `CICFLOWMETER_CWD`.
+
+### 2) Configuracao
+
+No `.env`, configure os caminhos e a quantidade inicial de workers:
+
+```bash
+CAPTURE_OUTPUT_DIR=data/raw/captures
+FLOW_OUTPUT_DIR=data/processed/flows
+FLOW_WORKER_COUNT=1
+CICFLOWMETER_BIN=cicflowmeter
+CICFLOWMETER_CWD=
+```
+
+### 3) Executar o servico
+
+Em um terminal, rode a captura:
+
+```bash
+python src/capture/traffic_capture.py
+```
+
+Em outro terminal, rode a extracao de features:
+
+```bash
+python src/capture/flow_extraction_service.py
+```
+
+O servico nao reprocessa PCAPs antigos ao iniciar. Apenas novos arquivos `.pcap` fechados pelo `tcpdump` depois do inicio do observador entram na fila. A saida CSV do CICFlowMeter e gravada em `data/processed/flows/`.
+
 ## Principais Dependências
 
-- pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub
+- pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub, watchdog
 
 Veja `requirements.txt` para a lista completa.
 
