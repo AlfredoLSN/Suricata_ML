@@ -76,6 +76,8 @@ def build_capture_command(settings: CaptureSettings) -> list[str]:
         str(ROTATION_SECONDS),
         "-w",
         str(build_output_pcap_pattern(settings.output_dir)),
+        "-Z",
+        "root",
     ]
 
 
