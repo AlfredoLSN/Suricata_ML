@@ -15,10 +15,19 @@ from dotenv import load_dotenv
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.classification.flow_classifier import FlowClassifier
+
 DEFAULT_CAPTURE_OUTPUT_DIR = "data/raw/captures"
 DEFAULT_FLOW_OUTPUT_DIR = "data/processed/flows"
+DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR = "data/processed/classified_flows"
 DEFAULT_WORKER_COUNT = 1
 DEFAULT_CICFLOWMETER_BIN = "cicflowmeter"
+DEFAULT_CLASSIFICATION_MODEL_PATH = "modelo/pipeline.joblib"
+DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH = "modelo/label_encoder.joblib"
 QUEUE_POLL_TIMEOUT_SECONDS = 1.0
 SHUTDOWN_POLL_SECONDS = 0.5
 
@@ -32,6 +41,13 @@ class FlowExtractionSettings:
     worker_count: int
     cicflowmeter_bin: str
     cicflowmeter_cwd: Path | None
+    classification_enabled: bool
+    classification_model_path: Path
+    classification_label_encoder_path: Path | None
+    classified_flow_output_dir: Path
+    classification_label_names: list[str]
+    classification_excluded_src_ip: str | None
+    classification_remove_src_ip: bool
 
 
 class ShutdownRequested(Exception):
@@ -60,7 +76,7 @@ class ClosedPcapPublisher(FileSystemEventHandler):
 
 
 def get_project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return PROJECT_ROOT
 
 
 def configure_logging() -> None:
@@ -96,20 +112,45 @@ def load_settings() -> FlowExtractionSettings:
         project_root,
         os.getenv("FLOW_OUTPUT_DIR", DEFAULT_FLOW_OUTPUT_DIR),
     )
+    classified_flow_output_dir = resolve_project_path(
+        project_root,
+        os.getenv("CLASSIFIED_FLOW_OUTPUT_DIR", DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR),
+    )
     worker_count = parse_worker_count(os.getenv("FLOW_WORKER_COUNT", ""))
     cicflowmeter_bin = os.getenv("CICFLOWMETER_BIN", DEFAULT_CICFLOWMETER_BIN).strip()
     cicflowmeter_cwd = resolve_optional_project_path(
         project_root,
         os.getenv("CICFLOWMETER_CWD", ""),
     )
+    classification_enabled = parse_bool(os.getenv("CLASSIFICATION_ENABLED", "false"))
+    classification_model_path = resolve_project_path(
+        project_root,
+        os.getenv("CLASSIFICATION_MODEL_PATH", DEFAULT_CLASSIFICATION_MODEL_PATH),
+    )
+    classification_label_encoder_path = resolve_optional_project_path(
+        project_root,
+        os.getenv("CLASSIFICATION_LABEL_ENCODER_PATH", DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH),
+    )
+    classification_label_names = parse_label_names(os.getenv("CLASSIFICATION_LABELS", ""))
+    classification_excluded_src_ip = parse_optional_text(
+        os.getenv("CLASSIFICATION_EXCLUDED_SRC_IP", "")
+    )
+    classification_remove_src_ip = parse_bool(os.getenv("CLASSIFICATION_REMOVE_SRC_IP", "true"))
 
     if not cicflowmeter_bin:
         raise ValueError("A variavel CICFLOWMETER_BIN nao pode ficar vazia.")
     if cicflowmeter_cwd is not None and not cicflowmeter_cwd.is_dir():
         raise ValueError(f"CICFLOWMETER_CWD nao e um diretorio valido: {cicflowmeter_cwd}")
+    if classification_enabled and not classification_model_path.is_file():
+        raise ValueError(
+            f"CLASSIFICATION_MODEL_PATH nao aponta para um arquivo valido: "
+            f"{classification_model_path}"
+        )
 
     capture_dir.mkdir(parents=True, exist_ok=True)
     flow_output_dir.mkdir(parents=True, exist_ok=True)
+    if classification_enabled:
+        classified_flow_output_dir.mkdir(parents=True, exist_ok=True)
 
     return FlowExtractionSettings(
         capture_dir=capture_dir,
@@ -117,6 +158,13 @@ def load_settings() -> FlowExtractionSettings:
         worker_count=worker_count,
         cicflowmeter_bin=cicflowmeter_bin,
         cicflowmeter_cwd=cicflowmeter_cwd,
+        classification_enabled=classification_enabled,
+        classification_model_path=classification_model_path,
+        classification_label_encoder_path=classification_label_encoder_path,
+        classified_flow_output_dir=classified_flow_output_dir,
+        classification_label_names=classification_label_names,
+        classification_excluded_src_ip=classification_excluded_src_ip,
+        classification_remove_src_ip=classification_remove_src_ip,
     )
 
 
@@ -135,6 +183,29 @@ def parse_worker_count(raw_value: str) -> int:
     return worker_count
 
 
+def parse_bool(raw_value: str) -> bool:
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on", "sim"}:
+        return True
+    if normalized in {"", "0", "false", "no", "n", "off", "nao", "não"}:
+        return False
+
+    raise ValueError(
+        "Valores booleanos aceitos: true/false, yes/no, on/off, 1/0, sim/nao."
+    )
+
+
+def parse_label_names(raw_value: str) -> list[str]:
+    return [label.strip() for label in raw_value.split(",") if label.strip()]
+
+
+def parse_optional_text(raw_value: str) -> str | None:
+    value = raw_value.strip()
+    if not value:
+        return None
+    return value
+
+
 def build_cicflowmeter_command(settings: FlowExtractionSettings, pcap_path: Path) -> list[str]:
     return [
         settings.cicflowmeter_bin,
@@ -146,6 +217,7 @@ def build_cicflowmeter_command(settings: FlowExtractionSettings, pcap_path: Path
 def process_pcap(settings: FlowExtractionSettings, pcap_path: Path) -> None:
     command = build_cicflowmeter_command(settings, pcap_path)
     started_at = time.monotonic()
+    started_at_wall = time.time()
 
     logger.info("Starting CICFlowMeter extraction: %s", pcap_path)
     logger.debug("Command: %s", " ".join(command))
@@ -184,6 +256,95 @@ def process_pcap(settings: FlowExtractionSettings, pcap_path: Path) -> None:
     elapsed = time.monotonic() - started_at
     logger.info("CICFlowMeter extraction finished: %s | elapsed=%.2fs", pcap_path, elapsed)
     log_subprocess_output(completed.stdout, completed.stderr)
+    classify_generated_flow_csvs(settings, pcap_path, started_at_wall)
+
+
+def classify_generated_flow_csvs(
+    settings: FlowExtractionSettings,
+    pcap_path: Path,
+    extraction_started_at: float,
+) -> None:
+    if not settings.classification_enabled:
+        return
+
+    flow_csvs = find_generated_flow_csvs(
+        flow_output_dir=settings.flow_output_dir,
+        pcap_path=pcap_path,
+        extraction_started_at=extraction_started_at,
+    )
+    if not flow_csvs:
+        logger.warning(
+            "Classification skipped for %s: no generated CICFlowMeter CSV was found.",
+            pcap_path,
+        )
+        return
+
+    try:
+        classifier = FlowClassifier(
+            model_path=settings.classification_model_path,
+            label_encoder_path=settings.classification_label_encoder_path,
+            label_names=settings.classification_label_names,
+            excluded_src_ip=settings.classification_excluded_src_ip,
+            remove_src_ip=settings.classification_remove_src_ip,
+        )
+    except Exception:
+        logger.exception(
+            "Classification skipped for %s: failed to load model %s",
+            pcap_path,
+            settings.classification_model_path,
+        )
+        return
+
+    for flow_csv in flow_csvs:
+        output_csv = settings.classified_flow_output_dir / build_classified_csv_name(flow_csv)
+        try:
+            result = classifier.classify_file(flow_csv, output_csv)
+        except Exception:
+            logger.exception("Classification failed for generated CSV: %s", flow_csv)
+            continue
+
+        logger.info(
+            "Classification finished: %s -> %s | rows=%s | predictions=%s",
+            result.input_csv,
+            result.output_csv,
+            result.rows_classified,
+            result.prediction_counts,
+        )
+        if result.rows_removed_by_src_ip:
+            logger.info(
+                "Classification input filter: %s row(s) removed from %s by Src IP == %s",
+                result.rows_removed_by_src_ip,
+                result.rows_before_filter,
+                settings.classification_excluded_src_ip,
+            )
+
+
+def find_generated_flow_csvs(
+    flow_output_dir: Path,
+    pcap_path: Path,
+    extraction_started_at: float,
+) -> list[Path]:
+    expected_names = [
+        f"{pcap_path.name}_Flow.csv",
+        f"{pcap_path.stem}_Flow.csv",
+        f"{pcap_path.name}.csv",
+        f"{pcap_path.stem}.csv",
+    ]
+    expected_paths = [flow_output_dir / name for name in expected_names]
+    existing_expected_paths = [path for path in expected_paths if path.is_file()]
+    if existing_expected_paths:
+        return existing_expected_paths
+
+    candidates = [
+        path
+        for path in flow_output_dir.glob("*.csv")
+        if path.is_file() and path.stat().st_mtime >= extraction_started_at
+    ]
+    return sorted(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def build_classified_csv_name(flow_csv: Path) -> str:
+    return f"{flow_csv.stem}_classified{flow_csv.suffix}"
 
 
 def log_subprocess_output(stdout: str | None, stderr: str | None) -> None:

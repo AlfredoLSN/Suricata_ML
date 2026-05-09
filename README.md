@@ -73,6 +73,13 @@ FLOW_OUTPUT_DIR=data/processed/flows
 FLOW_WORKER_COUNT=1
 CICFLOWMETER_BIN=cicflowmeter
 CICFLOWMETER_CWD=
+CLASSIFICATION_ENABLED=false
+CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
+CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
+CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
+CLASSIFICATION_LABELS=
+CLASSIFICATION_EXCLUDED_SRC_IP=
+CLASSIFICATION_REMOVE_SRC_IP=true
 ```
 
 ### 2) Executar captura continua
@@ -112,6 +119,13 @@ FLOW_OUTPUT_DIR=data/processed/flows
 FLOW_WORKER_COUNT=1
 CICFLOWMETER_BIN=cicflowmeter
 CICFLOWMETER_CWD=
+CLASSIFICATION_ENABLED=false
+CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
+CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
+CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
+CLASSIFICATION_LABELS=
+CLASSIFICATION_EXCLUDED_SRC_IP=
+CLASSIFICATION_REMOVE_SRC_IP=true
 ```
 
 ### 3) Executar o servico
@@ -129,6 +143,36 @@ python src/capture/flow_extraction_service.py
 ```
 
 O servico nao reprocessa PCAPs antigos ao iniciar. Apenas novos arquivos `.pcap` fechados pelo `tcpdump` depois do inicio do observador entram na fila. A saida CSV do CICFlowMeter e gravada em `data/processed/flows/`.
+
+### 4) Classificacao automatica dos CSVs gerados
+
+Para classificar cada CSV logo apos uma extracao bem-sucedida do CICFlowMeter, habilite no `.env`:
+
+```bash
+CLASSIFICATION_ENABLED=true
+CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
+CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
+CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
+```
+
+O servico carrega o pipeline treinado, usa as colunas de `feature_names_in_` salvas no pipeline ou em seus steps, decodifica as predicoes com `label_encoder.joblib` quando disponivel, adiciona as colunas `Prediction`, `Prediction Label` e, quando disponivel, `Prediction Confidence`, e grava um novo CSV em `data/processed/classified_flows/`.
+
+Antes da inferencia, o CSV do CICFlowMeter e preparado para bater com as colunas do treino: nomes alternativos como `Total Fwd Packet`, `Total Bwd packets`, `Packet Length Min`, `FWD Init Win Bytes` e outros sao mapeados para os nomes esperados pelo modelo. Valores nao numericos sao convertidos para `NaN`; o tratamento de `Infinity`, `-Infinity` e valores ausentes fica a cargo do proprio pipeline (`ReplaceInfWithNan` e `SimpleImputer`). Se uma feature esperada nao existir no CSV, a classificacao daquele arquivo falha com log explicito em vez de predizer com colunas erradas.
+
+Para remover flows originados do proprio host antes da classificacao, configure:
+
+```bash
+CLASSIFICATION_EXCLUDED_SRC_IP=192.168.0.10
+CLASSIFICATION_REMOVE_SRC_IP=true
+```
+
+Se voce nao quiser usar `CLASSIFICATION_LABEL_ENCODER_PATH`, deixe essa variavel vazia e nomeie classes numericas manualmente com:
+
+```bash
+CLASSIFICATION_LABELS=BENIGN,DOS,PORTSCAN,BOT,INFILTRATION
+```
+
+Caso `CLASSIFICATION_LABEL_ENCODER_PATH` e `CLASSIFICATION_LABELS` fiquem vazios, o CSV classificado preserva o valor numerico retornado pelo modelo como texto em `Prediction Label`.
 
 ## Principais Dependências
 
