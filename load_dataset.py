@@ -16,5 +16,6 @@ def load(filenames: list):
         dfs.append(df)
     
     dfs = pd.concat(dfs)
+    print("Quantidade de duplicatas antes de remover: ", dfs.duplicated().sum())
     dfs.drop_duplicates(inplace=True)
     return dfs
