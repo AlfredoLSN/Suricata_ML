@@ -1,0 +1,63 @@
+2026-05-07 16:37:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_163610.pcap
+2026-05-07 16:37:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:37:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:38:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_163710.pcap
+2026-05-07 16:38:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:38:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:39:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_163810.pcap
+2026-05-07 16:39:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:39:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:40:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_163910.pcap
+2026-05-07 16:40:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:40:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:41:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164010.pcap
+2026-05-07 16:41:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:41:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:42:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164110.pcap
+2026-05-07 16:42:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:42:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:43:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164210.pcap
+2026-05-07 16:43:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:43:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:44:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164310.pcap
+2026-05-07 16:44:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:44:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:45:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164410.pcap
+2026-05-07 16:45:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:45:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:46:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164510.pcap
+2026-05-07 16:46:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:46:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:47:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164610.pcap
+2026-05-07 16:47:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:47:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:48:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164710.pcap
+2026-05-07 16:48:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:48:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:49:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164810.pcap
+2026-05-07 16:49:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:49:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:50:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_164910.pcap
+2026-05-07 16:50:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:50:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:51:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165010.pcap
+2026-05-07 16:51:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:51:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:52:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165110.pcap
+2026-05-07 16:52:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:52:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:53:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165210.pcap
+2026-05-07 16:53:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:53:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:54:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165310.pcap
+2026-05-07 16:54:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:54:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:55:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165410.pcap
+2026-05-07 16:55:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:55:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:56:10 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165510.pcap
+2026-05-07 16:56:10 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:56:10 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
+2026-05-07 16:57:01 INFO  cic.cs.unb.ca.ifm.Cmd    You select: /home/alfredolsn/Documents/Suricata_ML/data/raw/captures/capture_20260507_165610.pcap
+2026-05-07 16:57:01 INFO  cic.cs.unb.ca.ifm.Cmd    Out folder: /home/alfredolsn/Documents/Suricata_ML/data/processed/flows
+2026-05-07 16:57:02 INFO  cic.cs.unb.ca.ifm.Cmd    CICFlowMeter received 1 pcap file
