@@ -87,9 +87,6 @@ TELEGRAM_CHAT_ID=
 TELEGRAM_TIMEOUT_SECONDS=15
 TELEGRAM_RETRY_COUNT=3
 TELEGRAM_RETRY_BACKOFF_SECONDS=2
-FIREWALL_COMMAND=iptables
-FIREWALL_CHAIN=INPUT
-FIREWALL_TARGET=DROP
 ```
 
 ### 2) Executar captura continua
@@ -143,9 +140,6 @@ TELEGRAM_CHAT_ID=
 TELEGRAM_TIMEOUT_SECONDS=15
 TELEGRAM_RETRY_COUNT=3
 TELEGRAM_RETRY_BACKOFF_SECONDS=2
-FIREWALL_COMMAND=iptables
-FIREWALL_CHAIN=INPUT
-FIREWALL_TARGET=DROP
 ```
 
 ### 3) Executar o servico
@@ -194,7 +188,7 @@ CLASSIFICATION_LABELS=BENIGN,DOS,PORTSCAN,BOT,INFILTRATION
 
 Caso `CLASSIFICATION_LABEL_ENCODER_PATH` e `CLASSIFICATION_LABELS` fiquem vazios, o CSV classificado preserva o valor numerico retornado pelo modelo como texto em `Prediction Label`.
 
-### Resposta IDS/IPS
+### Resposta IDS
 
 Depois de cada classificacao, o servico pode reagir a fluxos cujo `Prediction Label` nao esteja em `CLASSIFICATION_BENIGN_LABELS`. Por padrao, `BENIGN` e `0` sao considerados trafego normal:
 
@@ -209,15 +203,9 @@ TELEGRAM_CHAT_ID=-1001234567890
 TELEGRAM_TIMEOUT_SECONDS=15
 TELEGRAM_RETRY_COUNT=3
 TELEGRAM_RETRY_BACKOFF_SECONDS=2
-
-# IPS: bloqueia o Src IP no firewall
-THREAT_RESPONSE_MODE=ips
-FIREWALL_COMMAND=iptables
-FIREWALL_CHAIN=INPUT
-FIREWALL_TARGET=DROP
 ```
 
-No modo `ids`, o alerta resume ate 10 fluxos maliciosos por CSV classificado. No modo `ips`, o servico valida os enderecos em `Src IP`, evita criar regra duplicada com `iptables -C` e entao insere a regra com `iptables -I INPUT -s <ip> -j DROP`. Para usar IPS, execute o servico com permissao para alterar regras de firewall.
+No modo `ids`, o alerta envia todos os fluxos maliciosos encontrados no CSV classificado. Se a mensagem ficar grande demais para o Telegram, o servico divide o alerta em varias mensagens.
 
 ## Principais Dependências
 

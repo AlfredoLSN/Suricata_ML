@@ -21,7 +21,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.classification.flow_classifier import FlowClassifier
 from src.response.threat_response import (
-    FirewallSettings,
     TelegramSettings,
     ThreatResponder,
     ThreatResponseSettings,
@@ -165,11 +164,6 @@ def load_settings() -> FlowExtractionSettings:
                 os.getenv("TELEGRAM_RETRY_BACKOFF_SECONDS", "2"),
                 variable_name="TELEGRAM_RETRY_BACKOFF_SECONDS",
             ),
-        ),
-        firewall=FirewallSettings(
-            command=os.getenv("FIREWALL_COMMAND", "iptables").strip() or "iptables",
-            chain=os.getenv("FIREWALL_CHAIN", "INPUT").strip() or "INPUT",
-            target=os.getenv("FIREWALL_TARGET", "DROP").strip() or "DROP",
         ),
     )
 

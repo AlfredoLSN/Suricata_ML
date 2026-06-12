@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import ipaddress
 import logging
-import subprocess
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -20,7 +18,6 @@ TELEGRAM_MESSAGE_LIMIT = 3500
 class ThreatResponseMode(Enum):
     OFF = "off"
     IDS = "ids"
-    IPS = "ips"
 
 
 @dataclass(frozen=True)
@@ -37,17 +34,9 @@ class TelegramSettings:
 
 
 @dataclass(frozen=True)
-class FirewallSettings:
-    command: str = "iptables"
-    chain: str = "INPUT"
-    target: str = "DROP"
-
-
-@dataclass(frozen=True)
 class ThreatResponseSettings:
     mode: ThreatResponseMode
     telegram: TelegramSettings
-    firewall: FirewallSettings
 
 
 class ThreatResponder:
@@ -62,10 +51,6 @@ class ThreatResponder:
 
         if self._settings.mode is ThreatResponseMode.IDS:
             self._send_telegram_warning(threat_flows)
-            return
-
-        if self._settings.mode is ThreatResponseMode.IPS:
-            self._block_source_ips(threat_flows)
 
     def _send_telegram_warning(self, threat_flows: list[ClassifiedThreatFlow]) -> None:
         if not self._settings.telegram.configured:
@@ -107,54 +92,6 @@ class ThreatResponder:
                     telegram.retry_backoff_seconds,
                 )
                 time.sleep(telegram.retry_backoff_seconds)
-
-    def _block_source_ips(self, threat_flows: list[ClassifiedThreatFlow]) -> None:
-        source_ips = sorted(
-            {
-                threat_flow.source_ip
-                for threat_flow in threat_flows
-                if threat_flow.source_ip and self._is_valid_ip(threat_flow.source_ip)
-            }
-        )
-        if not source_ips:
-            logger.warning("IPS block skipped: no valid source IP found in threat flows.")
-            return
-
-        for source_ip in source_ips:
-            if self._firewall_rule_exists(source_ip):
-                logger.info("Firewall rule already exists for source IP: %s", source_ip)
-                continue
-
-            command = self._firewall_command(source_ip, operation="-I")
-            try:
-                subprocess.run(command, check=True, capture_output=True, text=True)
-            except subprocess.CalledProcessError as exc:
-                logger.error(
-                    "Failed to block source IP %s | returncode=%s | stderr=%s",
-                    source_ip,
-                    exc.returncode,
-                    (exc.stderr or "").strip(),
-                )
-                continue
-
-            logger.warning("Blocked source IP via firewall: %s", source_ip)
-
-    def _firewall_rule_exists(self, source_ip: str) -> bool:
-        command = self._firewall_command(source_ip, operation="-C")
-        completed = subprocess.run(command, capture_output=True, text=True)
-        return completed.returncode == 0
-
-    def _firewall_command(self, source_ip: str, operation: str) -> list[str]:
-        firewall = self._settings.firewall
-        return [
-            firewall.command,
-            operation,
-            firewall.chain,
-            "-s",
-            source_ip,
-            "-j",
-            firewall.target,
-        ]
 
     def _build_telegram_messages(self, threat_flows: list[ClassifiedThreatFlow]) -> list[str]:
         header = [
@@ -203,16 +140,6 @@ class ThreatResponder:
             f"{source}{source_port} -> {destination}{destination_port}"
             f"{protocol}{confidence}"
         )
-
-    def _is_valid_ip(self, source_ip: str) -> bool:
-        try:
-            ipaddress.ip_address(source_ip)
-        except ValueError:
-            logger.warning("Invalid source IP ignored by IPS mode: %s", source_ip)
-            return False
-
-        return True
-
 
 def parse_threat_response_mode(raw_value: str) -> ThreatResponseMode:
     normalized = raw_value.strip().lower()
