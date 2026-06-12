@@ -78,8 +78,16 @@ CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
 CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
 CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
 CLASSIFICATION_LABELS=
+CLASSIFICATION_BENIGN_LABELS=BENIGN,0
 CLASSIFICATION_EXCLUDED_SRC_IP=
 CLASSIFICATION_REMOVE_SRC_IP=true
+THREAT_RESPONSE_MODE=off
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_TIMEOUT_SECONDS=5
+FIREWALL_COMMAND=iptables
+FIREWALL_CHAIN=INPUT
+FIREWALL_TARGET=DROP
 ```
 
 ### 2) Executar captura continua
@@ -124,8 +132,16 @@ CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
 CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
 CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
 CLASSIFICATION_LABELS=
+CLASSIFICATION_BENIGN_LABELS=BENIGN,0
 CLASSIFICATION_EXCLUDED_SRC_IP=
 CLASSIFICATION_REMOVE_SRC_IP=true
+THREAT_RESPONSE_MODE=off
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_TIMEOUT_SECONDS=5
+FIREWALL_COMMAND=iptables
+FIREWALL_CHAIN=INPUT
+FIREWALL_TARGET=DROP
 ```
 
 ### 3) Executar o servico
@@ -174,6 +190,28 @@ CLASSIFICATION_LABELS=BENIGN,DOS,PORTSCAN,BOT,INFILTRATION
 
 Caso `CLASSIFICATION_LABEL_ENCODER_PATH` e `CLASSIFICATION_LABELS` fiquem vazios, o CSV classificado preserva o valor numerico retornado pelo modelo como texto em `Prediction Label`.
 
+### Resposta IDS/IPS
+
+Depois de cada classificacao, o servico pode reagir a fluxos cujo `Prediction Label` nao esteja em `CLASSIFICATION_BENIGN_LABELS`. Por padrao, `BENIGN` e `0` sao considerados trafego normal:
+
+```bash
+# Apenas gera CSV classificado
+THREAT_RESPONSE_MODE=off
+
+# IDS: envia alerta no Telegram
+THREAT_RESPONSE_MODE=ids
+TELEGRAM_BOT_TOKEN=123456:token-do-bot
+TELEGRAM_CHAT_ID=-1001234567890
+
+# IPS: bloqueia o Src IP no firewall
+THREAT_RESPONSE_MODE=ips
+FIREWALL_COMMAND=iptables
+FIREWALL_CHAIN=INPUT
+FIREWALL_TARGET=DROP
+```
+
+No modo `ids`, o alerta resume ate 10 fluxos maliciosos por CSV classificado. No modo `ips`, o servico valida os enderecos em `Src IP`, evita criar regra duplicada com `iptables -C` e entao insere a regra com `iptables -I INPUT -s <ip> -j DROP`. Para usar IPS, execute o servico com permissao para alterar regras de firewall.
+
 ## Principais Dependências
 
 - pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub, watchdog
@@ -184,4 +222,4 @@ Veja `requirements.txt` para a lista completa.
 
 - Certifique-se de que o Suricata está configurado e gerando o arquivo `eve.json` em `/var/log/suricata/eve.json`.
 - Os modelos treinados devem estar na pasta `modelo/` (`random_forest_model.joblib` e `minmax_scaler.joblib`).
-- Configure o token e chat_id do Telegram em `suricata_classification.py` para receber alertas.
+- Configure `THREAT_RESPONSE_MODE=ids` e as variaveis `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` no `.env` para receber alertas no Telegram.

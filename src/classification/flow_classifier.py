@@ -98,6 +98,17 @@ FEATURE_COLUMN_ALIASES = {
 
 
 @dataclass(frozen=True)
+class ClassifiedThreatFlow:
+    source_ip: str | None
+    destination_ip: str | None
+    source_port: str | None
+    destination_port: str | None
+    protocol: str | None
+    prediction_label: str
+    prediction_confidence: float | None
+
+
+@dataclass(frozen=True)
 class ClassificationResult:
     input_csv: Path
     output_csv: Path
@@ -105,6 +116,7 @@ class ClassificationResult:
     rows_removed_by_src_ip: int
     rows_classified: int
     prediction_counts: dict[str, int]
+    threat_flows: list[ClassifiedThreatFlow]
 
 
 class FlowClassifier:
@@ -113,6 +125,7 @@ class FlowClassifier:
         model_path: Path,
         label_encoder_path: Path | None = None,
         label_names: list[str] | None = None,
+        benign_label_names: list[str] | None = None,
         excluded_src_ip: str | None = None,
         remove_src_ip: bool = True,
     ) -> None:
@@ -121,6 +134,11 @@ class FlowClassifier:
         self._label_encoder = self._load_label_encoder(label_encoder_path)
         self._feature_names = self._resolve_feature_names()
         self._label_names = label_names or []
+        self._benign_label_names = {
+            label_name.strip().upper()
+            for label_name in (benign_label_names or ["BENIGN", "0"])
+            if label_name.strip()
+        }
         self._excluded_src_ip = excluded_src_ip.strip() if excluded_src_ip else None
         self._remove_src_ip = remove_src_ip
 
@@ -140,6 +158,7 @@ class FlowClassifier:
                 rows_removed_by_src_ip=rows_removed_by_src_ip,
                 rows_classified=0,
                 prediction_counts={},
+                threat_flows=[],
             )
 
         features = self._prepare_feature_frame(df)
@@ -159,6 +178,7 @@ class FlowClassifier:
         output_df.to_csv(output_csv, index=False)
 
         prediction_counts = output_df["Prediction Label"].value_counts().to_dict()
+        threat_flows = self._build_threat_flows(df, output_df)
         return ClassificationResult(
             input_csv=input_csv,
             output_csv=output_csv,
@@ -166,6 +186,7 @@ class FlowClassifier:
             rows_removed_by_src_ip=rows_removed_by_src_ip,
             rows_classified=len(output_df),
             prediction_counts={str(label): int(count) for label, count in prediction_counts.items()},
+            threat_flows=threat_flows,
         )
 
     def _load_label_encoder(self, label_encoder_path: Path | None) -> object | None:
@@ -251,3 +272,68 @@ class FlowClassifier:
                 return self._label_names[index]
 
         return str(prediction)
+
+    def _build_threat_flows(
+        self,
+        original_df: pd.DataFrame,
+        output_df: pd.DataFrame,
+    ) -> list[ClassifiedThreatFlow]:
+        threat_flows: list[ClassifiedThreatFlow] = []
+        prediction_labels = output_df["Prediction Label"].astype(str)
+        benign_mask = prediction_labels.str.strip().str.upper().isin(self._benign_label_names)
+
+        for index in output_df.index[~benign_mask]:
+            threat_flows.append(
+                ClassifiedThreatFlow(
+                    source_ip=self._read_optional_value(original_df, index, "Src IP"),
+                    destination_ip=self._read_optional_value(original_df, index, "Dst IP"),
+                    source_port=self._read_optional_value(original_df, index, "Src Port"),
+                    destination_port=self._read_optional_value(original_df, index, "Dst Port"),
+                    protocol=self._read_optional_value(original_df, index, "Protocol"),
+                    prediction_label=str(output_df.at[index, "Prediction Label"]),
+                    prediction_confidence=self._read_optional_float(
+                        output_df,
+                        index,
+                        "Prediction Confidence",
+                    ),
+                )
+            )
+
+        return threat_flows
+
+    def _read_optional_value(
+        self,
+        df: pd.DataFrame,
+        index: object,
+        column: str,
+    ) -> str | None:
+        if column not in df.columns:
+            return None
+
+        value = df.at[index, column]
+        if pd.isna(value):
+            return None
+
+        value_text = str(value).strip()
+        if not value_text:
+            return None
+
+        return value_text
+
+    def _read_optional_float(
+        self,
+        df: pd.DataFrame,
+        index: object,
+        column: str,
+    ) -> float | None:
+        if column not in df.columns:
+            return None
+
+        value = df.at[index, column]
+        if pd.isna(value):
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None

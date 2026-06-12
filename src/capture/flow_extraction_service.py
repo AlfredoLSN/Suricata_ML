@@ -20,6 +20,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.classification.flow_classifier import FlowClassifier
+from src.response.threat_response import (
+    FirewallSettings,
+    TelegramSettings,
+    ThreatResponder,
+    ThreatResponseSettings,
+    parse_threat_response_mode,
+)
 
 DEFAULT_CAPTURE_OUTPUT_DIR = "data/raw/captures"
 DEFAULT_FLOW_OUTPUT_DIR = "data/processed/flows"
@@ -46,8 +53,10 @@ class FlowExtractionSettings:
     classification_label_encoder_path: Path | None
     classified_flow_output_dir: Path
     classification_label_names: list[str]
+    classification_benign_label_names: list[str]
     classification_excluded_src_ip: str | None
     classification_remove_src_ip: bool
+    threat_response_settings: ThreatResponseSettings
 
 
 class ShutdownRequested(Exception):
@@ -132,10 +141,29 @@ def load_settings() -> FlowExtractionSettings:
         os.getenv("CLASSIFICATION_LABEL_ENCODER_PATH", DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH),
     )
     classification_label_names = parse_label_names(os.getenv("CLASSIFICATION_LABELS", ""))
+    classification_benign_label_names = parse_label_names(
+        os.getenv("CLASSIFICATION_BENIGN_LABELS", "BENIGN,0")
+    )
     classification_excluded_src_ip = parse_optional_text(
         os.getenv("CLASSIFICATION_EXCLUDED_SRC_IP", "")
     )
     classification_remove_src_ip = parse_bool(os.getenv("CLASSIFICATION_REMOVE_SRC_IP", "true"))
+    threat_response_settings = ThreatResponseSettings(
+        mode=parse_threat_response_mode(os.getenv("THREAT_RESPONSE_MODE", "off")),
+        telegram=TelegramSettings(
+            token=parse_optional_text(os.getenv("TELEGRAM_BOT_TOKEN", "")),
+            chat_id=parse_optional_text(os.getenv("TELEGRAM_CHAT_ID", "")),
+            timeout_seconds=parse_positive_float(
+                os.getenv("TELEGRAM_TIMEOUT_SECONDS", "5"),
+                variable_name="TELEGRAM_TIMEOUT_SECONDS",
+            ),
+        ),
+        firewall=FirewallSettings(
+            command=os.getenv("FIREWALL_COMMAND", "iptables").strip() or "iptables",
+            chain=os.getenv("FIREWALL_CHAIN", "INPUT").strip() or "INPUT",
+            target=os.getenv("FIREWALL_TARGET", "DROP").strip() or "DROP",
+        ),
+    )
 
     if not cicflowmeter_bin:
         raise ValueError("A variavel CICFLOWMETER_BIN nao pode ficar vazia.")
@@ -163,8 +191,10 @@ def load_settings() -> FlowExtractionSettings:
         classification_label_encoder_path=classification_label_encoder_path,
         classified_flow_output_dir=classified_flow_output_dir,
         classification_label_names=classification_label_names,
+        classification_benign_label_names=classification_benign_label_names,
         classification_excluded_src_ip=classification_excluded_src_ip,
         classification_remove_src_ip=classification_remove_src_ip,
+        threat_response_settings=threat_response_settings,
     )
 
 
@@ -203,6 +233,18 @@ def parse_optional_text(raw_value: str) -> str | None:
     value = raw_value.strip()
     if not value:
         return None
+    return value
+
+
+def parse_positive_float(raw_value: str, variable_name: str) -> float:
+    try:
+        value = float(raw_value.strip())
+    except ValueError as exc:
+        raise ValueError(f"{variable_name} deve ser um numero positivo.") from exc
+
+    if value <= 0:
+        raise ValueError(f"{variable_name} deve ser maior que zero.")
+
     return value
 
 
@@ -284,9 +326,11 @@ def classify_generated_flow_csvs(
             model_path=settings.classification_model_path,
             label_encoder_path=settings.classification_label_encoder_path,
             label_names=settings.classification_label_names,
+            benign_label_names=settings.classification_benign_label_names,
             excluded_src_ip=settings.classification_excluded_src_ip,
             remove_src_ip=settings.classification_remove_src_ip,
         )
+        threat_responder = ThreatResponder(settings.threat_response_settings)
     except Exception:
         logger.exception(
             "Classification skipped for %s: failed to load model %s",
@@ -310,6 +354,7 @@ def classify_generated_flow_csvs(
             result.rows_classified,
             result.prediction_counts,
         )
+        threat_responder.handle_threat_flows(result.threat_flows)
         if result.rows_removed_by_src_ip:
             logger.info(
                 "Classification input filter: %s row(s) removed from %s by Src IP == %s",
