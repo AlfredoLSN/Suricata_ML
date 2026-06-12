@@ -154,8 +154,16 @@ def load_settings() -> FlowExtractionSettings:
             token=parse_optional_text(os.getenv("TELEGRAM_BOT_TOKEN", "")),
             chat_id=parse_optional_text(os.getenv("TELEGRAM_CHAT_ID", "")),
             timeout_seconds=parse_positive_float(
-                os.getenv("TELEGRAM_TIMEOUT_SECONDS", "5"),
+                os.getenv("TELEGRAM_TIMEOUT_SECONDS", "15"),
                 variable_name="TELEGRAM_TIMEOUT_SECONDS",
+            ),
+            retry_count=parse_non_negative_int(
+                os.getenv("TELEGRAM_RETRY_COUNT", "3"),
+                variable_name="TELEGRAM_RETRY_COUNT",
+            ),
+            retry_backoff_seconds=parse_positive_float(
+                os.getenv("TELEGRAM_RETRY_BACKOFF_SECONDS", "2"),
+                variable_name="TELEGRAM_RETRY_BACKOFF_SECONDS",
             ),
         ),
         firewall=FirewallSettings(
@@ -244,6 +252,18 @@ def parse_positive_float(raw_value: str, variable_name: str) -> float:
 
     if value <= 0:
         raise ValueError(f"{variable_name} deve ser maior que zero.")
+
+    return value
+
+
+def parse_non_negative_int(raw_value: str, variable_name: str) -> int:
+    try:
+        value = int(raw_value.strip())
+    except ValueError as exc:
+        raise ValueError(f"{variable_name} deve ser um numero inteiro maior ou igual a zero.") from exc
+
+    if value < 0:
+        raise ValueError(f"{variable_name} deve ser maior ou igual a zero.")
 
     return value
 

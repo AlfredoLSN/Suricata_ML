@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import subprocess
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -26,7 +27,9 @@ class ThreatResponseMode(Enum):
 class TelegramSettings:
     token: str | None
     chat_id: str | None
-    timeout_seconds: float = 5.0
+    timeout_seconds: float = 15.0
+    retry_count: int = 3
+    retry_backoff_seconds: float = 2.0
 
     @property
     def configured(self) -> bool:
@@ -72,17 +75,38 @@ class ThreatResponder:
         url = f"https://api.telegram.org/bot{self._settings.telegram.token}/sendMessage"
 
         for message in self._build_telegram_messages(threat_flows):
-            data = {"chat_id": self._settings.telegram.chat_id, "text": message}
+            self._post_telegram_message(url, message)
 
+    def _post_telegram_message(self, url: str, message: str) -> None:
+        telegram = self._settings.telegram
+        data = {"chat_id": telegram.chat_id, "text": message}
+        max_attempts = telegram.retry_count + 1
+
+        for attempt in range(1, max_attempts + 1):
             try:
                 response = requests.post(
                     url,
                     data=data,
-                    timeout=self._settings.telegram.timeout_seconds,
+                    timeout=telegram.timeout_seconds,
                 )
                 response.raise_for_status()
-            except requests.RequestException:
-                logger.exception("Failed to send Telegram IDS alert.")
+                return
+            except requests.RequestException as exc:
+                if attempt >= max_attempts:
+                    logger.exception(
+                        "Failed to send Telegram IDS alert after %s attempt(s).",
+                        max_attempts,
+                    )
+                    return
+
+                logger.warning(
+                    "Telegram IDS alert attempt %s/%s failed: %s. Retrying in %.1fs.",
+                    attempt,
+                    max_attempts,
+                    exc,
+                    telegram.retry_backoff_seconds,
+                )
+                time.sleep(telegram.retry_backoff_seconds)
 
     def _block_source_ips(self, threat_flows: list[ClassifiedThreatFlow]) -> None:
         source_ips = sorted(
