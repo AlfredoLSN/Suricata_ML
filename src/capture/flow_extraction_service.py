@@ -54,7 +54,7 @@ class FlowExtractionSettings:
     classified_flow_output_dir: Path
     classification_label_names: list[str]
     classification_benign_label_names: list[str]
-    classification_excluded_src_ip: str | None
+    classification_excluded_src_ips: list[str]
     classification_remove_src_ip: bool
     threat_response_settings: ThreatResponseSettings
 
@@ -144,7 +144,7 @@ def load_settings() -> FlowExtractionSettings:
     classification_benign_label_names = parse_label_names(
         os.getenv("CLASSIFICATION_BENIGN_LABELS", "BENIGN,0")
     )
-    classification_excluded_src_ip = parse_optional_text(
+    classification_excluded_src_ips = parse_label_names(
         os.getenv("CLASSIFICATION_EXCLUDED_SRC_IP", "")
     )
     classification_remove_src_ip = parse_bool(os.getenv("CLASSIFICATION_REMOVE_SRC_IP", "true"))
@@ -200,7 +200,7 @@ def load_settings() -> FlowExtractionSettings:
         classified_flow_output_dir=classified_flow_output_dir,
         classification_label_names=classification_label_names,
         classification_benign_label_names=classification_benign_label_names,
-        classification_excluded_src_ip=classification_excluded_src_ip,
+        classification_excluded_src_ips=classification_excluded_src_ips,
         classification_remove_src_ip=classification_remove_src_ip,
         threat_response_settings=threat_response_settings,
     )
@@ -347,7 +347,7 @@ def classify_generated_flow_csvs(
             label_encoder_path=settings.classification_label_encoder_path,
             label_names=settings.classification_label_names,
             benign_label_names=settings.classification_benign_label_names,
-            excluded_src_ip=settings.classification_excluded_src_ip,
+            excluded_src_ips=settings.classification_excluded_src_ips,
             remove_src_ip=settings.classification_remove_src_ip,
         )
         threat_responder = ThreatResponder(settings.threat_response_settings)
@@ -380,7 +380,7 @@ def classify_generated_flow_csvs(
                 "Classification input filter: %s row(s) removed from %s by Src IP == %s",
                 result.rows_removed_by_src_ip,
                 result.rows_before_filter,
-                settings.classification_excluded_src_ip,
+                ", ".join(settings.classification_excluded_src_ips),
             )
 
 

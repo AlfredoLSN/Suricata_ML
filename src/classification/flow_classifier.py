@@ -126,7 +126,7 @@ class FlowClassifier:
         label_encoder_path: Path | None = None,
         label_names: list[str] | None = None,
         benign_label_names: list[str] | None = None,
-        excluded_src_ip: str | None = None,
+        excluded_src_ips: list[str] | None = None,
         remove_src_ip: bool = True,
     ) -> None:
         self._model_path = model_path
@@ -139,7 +139,11 @@ class FlowClassifier:
             for label_name in (benign_label_names or ["BENIGN", "0"])
             if label_name.strip()
         }
-        self._excluded_src_ip = excluded_src_ip.strip() if excluded_src_ip else None
+        self._excluded_src_ips = {
+            source_ip.strip()
+            for source_ip in (excluded_src_ips or [])
+            if source_ip.strip()
+        }
         self._remove_src_ip = remove_src_ip
 
     def classify_file(self, input_csv: Path, output_csv: Path) -> ClassificationResult:
@@ -220,13 +224,13 @@ class FlowClassifier:
         )
 
     def _filter_source_ip(self, df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-        if not self._remove_src_ip or self._excluded_src_ip is None:
+        if not self._remove_src_ip or not self._excluded_src_ips:
             return df, 0
 
         if "Src IP" not in df.columns:
             raise ValueError("A coluna 'Src IP' nao foi encontrada no CSV capturado.")
 
-        removal_mask = df["Src IP"].astype(str).str.strip() == self._excluded_src_ip
+        removal_mask = df["Src IP"].astype(str).str.strip().isin(self._excluded_src_ips)
         removed_count = int(removal_mask.sum())
         return df.loc[~removal_mask].copy(), removed_count
 

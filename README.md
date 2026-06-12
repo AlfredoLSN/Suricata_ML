@@ -179,10 +179,10 @@ O servico carrega o pipeline treinado, usa as colunas de `feature_names_in_` sal
 
 Antes da inferencia, o CSV do CICFlowMeter e preparado para bater com as colunas do treino: nomes alternativos como `Total Fwd Packet`, `Total Bwd packets`, `Packet Length Min`, `FWD Init Win Bytes` e outros sao mapeados para os nomes esperados pelo modelo. Valores nao numericos sao convertidos para `NaN`; o tratamento de `Infinity`, `-Infinity` e valores ausentes fica a cargo do proprio pipeline (`ReplaceInfWithNan` e `SimpleImputer`). Se uma feature esperada nao existir no CSV, a classificacao daquele arquivo falha com log explicito em vez de predizer com colunas erradas.
 
-Para remover flows originados do proprio host antes da classificacao, configure:
+Para remover flows originados do proprio host antes da classificacao, configure um ou mais IPs separados por virgula:
 
 ```bash
-CLASSIFICATION_EXCLUDED_SRC_IP=192.168.0.10
+CLASSIFICATION_EXCLUDED_SRC_IP=192.168.0.10,192.168.0.11
 CLASSIFICATION_REMOVE_SRC_IP=true
 ```
 
