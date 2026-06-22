@@ -1,0 +1,5 @@
+scenario,expected_class,start_time,end_time,command
+"C1 - Trafego benigno HTTP variado","BENIGN","2026-06-22T01:52:19-04:00","2026-06-22T01:52:50-04:00","curl com caminhos, métodos, cabeçalhos e intervalos variados"
+"C2 - DoS Hulk-like HTTP flood","DoS Hulk","2026-06-22T01:53:20-04:00","2026-06-22T01:53:57-04:00","ApacheBench: ab -n 2000 -c 200 em repetição durante o cenário"
+"C4 - DoS slowloris","DoS slowloris","2026-06-22T01:54:27-04:00","2026-06-22T01:54:57-04:00","python slowloris.py URL, limitado pelo tempo do cenário"
+"C5 - DoS Slowhttptest slow body","DoS Slowhttptest","2026-06-22T01:55:27-04:00","2026-06-22T01:55:49-04:00","slowhttptest -B -c 200 -r 50 -t POST -x 10 -s 4096 -p 3"
