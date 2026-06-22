@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ class ClassificationResult:
     output_csv: Path
     rows_before_filter: int
     rows_removed_by_src_ip: int
+    rows_removed_by_invalid_features: int
     rows_classified: int
     prediction_counts: dict[str, int]
     threat_flows: list[ClassifiedThreatFlow]
@@ -160,12 +162,32 @@ class FlowClassifier:
                 output_csv=output_csv,
                 rows_before_filter=rows_before_filter,
                 rows_removed_by_src_ip=rows_removed_by_src_ip,
+                rows_removed_by_invalid_features=0,
                 rows_classified=0,
                 prediction_counts={},
                 threat_flows=[],
             )
 
         features = self._prepare_feature_frame(df)
+        features, df, rows_removed_by_invalid_features = self._filter_invalid_feature_rows(
+            features,
+            df,
+        )
+
+        if features.empty:
+            output_csv.parent.mkdir(parents=True, exist_ok=True)
+            features.to_csv(output_csv, index=False)
+            return ClassificationResult(
+                input_csv=input_csv,
+                output_csv=output_csv,
+                rows_before_filter=rows_before_filter,
+                rows_removed_by_src_ip=rows_removed_by_src_ip,
+                rows_removed_by_invalid_features=rows_removed_by_invalid_features,
+                rows_classified=0,
+                prediction_counts={},
+                threat_flows=[],
+            )
+
         predictions = self._model.predict(features)
 
         output_df = features.copy()
@@ -188,6 +210,7 @@ class FlowClassifier:
             output_csv=output_csv,
             rows_before_filter=rows_before_filter,
             rows_removed_by_src_ip=rows_removed_by_src_ip,
+            rows_removed_by_invalid_features=rows_removed_by_invalid_features,
             rows_classified=len(output_df),
             prediction_counts={str(label): int(count) for label, count in prediction_counts.items()},
             threat_flows=threat_flows,
@@ -251,6 +274,29 @@ class FlowClassifier:
 
         features = features.apply(pd.to_numeric, errors="coerce")
         return features
+
+    def _filter_invalid_feature_rows(
+        self,
+        features: pd.DataFrame,
+        original_df: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+        invalid_mask = features.isna().any(axis=1)
+        infinite_mask = pd.DataFrame(
+            np.isinf(features.to_numpy(dtype=float)),
+            index=features.index,
+            columns=features.columns,
+        ).any(axis=1)
+        removal_mask = invalid_mask | infinite_mask
+        removed_count = int(removal_mask.sum())
+
+        if removed_count:
+            logger.info(
+                "Removing %s flow row(s) with null, NaN, Infinity or -Infinity feature values.",
+                removed_count,
+            )
+
+        valid_index = features.index[~removal_mask]
+        return features.loc[valid_index].copy(), original_df.loc[valid_index].copy(), removed_count
 
     def _find_source_column(self, df: pd.DataFrame, feature_name: str) -> str | None:
         candidates = FEATURE_COLUMN_ALIASES.get(feature_name, [feature_name])

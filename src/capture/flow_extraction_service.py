@@ -362,10 +362,11 @@ def classify_generated_flow_csvs(
             continue
 
         logger.info(
-            "Classification finished: %s -> %s | rows=%s | predictions=%s",
+            "Classification finished: %s -> %s | rows=%s | invalid_rows_removed=%s | predictions=%s",
             result.input_csv,
             result.output_csv,
             result.rows_classified,
+            result.rows_removed_by_invalid_features,
             result.prediction_counts,
         )
         threat_responder.handle_threat_flows(result.threat_flows)
