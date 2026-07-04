@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Suricata ML</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar">
+        <div>
+          <h1>Suricata ML</h1>
+          <p id="stateText">Carregando...</p>
+        </div>
+        <div class="status-pill" id="statePill">offline</div>
+      </section>
+
+      <section class="layout">
+        <form class="panel control-panel" id="controlForm">
+          <div class="panel-header">
+            <h2>Operacao</h2>
+          </div>
+
+          <label>
+            Interface de rede
+            <select id="interfaceSelect"></select>
+          </label>
+          <input id="manualInterface" type="text" placeholder="Ou digite a interface manualmente" />
+
+          <label>
+            Modelo
+            <select id="modelSelect"></select>
+          </label>
+
+          <label>
+            IPs de origem ignorados
+            <input id="ignoredIps" type="text" placeholder="192.168.0.10, 192.168.0.11" />
+          </label>
+
+          <div class="actions">
+            <button type="submit" id="startButton">Iniciar</button>
+            <button type="button" id="pauseButton" class="secondary">Pausar</button>
+          </div>
+          <p class="error-text" id="errorText"></p>
+        </form>
+
+        <section class="dashboard">
+          <div class="metrics">
+            <article>
+              <span>PCAPs</span>
+              <strong id="pcapCount">0</strong>
+            </article>
+            <article>
+              <span>Flows CSV</span>
+              <strong id="flowCount">0</strong>
+            </article>
+            <article>
+              <span>Classificados</span>
+              <strong id="classifiedCount">0</strong>
+            </article>
+            <article>
+              <span>Alertas</span>
+              <strong id="alertCount">0</strong>
+            </article>
+          </div>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Resumo</h2>
+            </div>
+            <div id="predictionCounts" class="chips"></div>
+            <div id="recentFiles" class="file-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Alertas</h2>
+            </div>
+            <div id="alertsList" class="alerts-list"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

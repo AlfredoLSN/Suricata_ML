@@ -207,9 +207,55 @@ TELEGRAM_RETRY_BACKOFF_SECONDS=2
 
 No modo `ids`, o alerta envia todos os fluxos maliciosos encontrados no CSV classificado. Se a mensagem ficar grande demais para o Telegram, o servico divide o alerta em varias mensagens.
 
+## Interface Web Local
+
+A ferramenta tambem pode ser operada por uma interface web local. Essa interface inicia a captura, aciona a extracao/classificacao em paralelo, permite pausar a captura com seguranca e mostra resultados e alertas internos sem depender do Telegram.
+
+### 1) Instalar dependencias
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2) Iniciar a interface
+
+```bash
+python -m src.web.server
+```
+
+Depois abra:
+
+```text
+http://127.0.0.1:8000
+```
+
+### 3) O que a tela permite configurar
+
+- Interface de rede, detectada automaticamente via `psutil`.
+- Modelo `.joblib` usado na classificacao.
+- IPs de origem ignorados antes da classificacao.
+
+As demais configuracoes operacionais continuam padronizadas na primeira versao: diretorios de captura/flows, quantidade de workers, rotacao de PCAP em 60 segundos, labels benignas `BENIGN,0` e modo de alerta interno.
+
+### 4) Alertas internos
+
+Ao iniciar pela interface, o pipeline executa com:
+
+```bash
+CLASSIFICATION_ENABLED=true
+THREAT_RESPONSE_MODE=internal
+INTERNAL_ALERT_DB_PATH=data/web/alerts.sqlite3
+```
+
+Os fluxos classificados como nao benignos sao persistidos em SQLite e aparecem na lista de alertas da propria UI. O modo Telegram continua existindo para execucao manual, mas nao e usado pelo fluxo web.
+
+### Observacao sobre ambiente
+
+A interface nao resolve permissoes administrativas. A captura ainda depende de `tcpdump`/`sudo` e a extracao ainda depende do `CICFlowMeter` instalado e acessivel pelo ambiente.
+
 ## Principais Dependências
 
-- pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub, watchdog
+- pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub, watchdog, FastAPI, Uvicorn
 
 Veja `requirements.txt` para a lista completa.
 

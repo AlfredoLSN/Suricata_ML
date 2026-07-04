@@ -165,6 +165,11 @@ def load_settings() -> FlowExtractionSettings:
                 variable_name="TELEGRAM_RETRY_BACKOFF_SECONDS",
             ),
         ),
+        internal_alert_db_path=resolve_optional_project_path(
+            project_root,
+            os.getenv("INTERNAL_ALERT_DB_PATH", ""),
+        ),
+        run_id=parse_optional_text(os.getenv("PIPELINE_RUN_ID", "")),
     )
 
     if not cicflowmeter_bin:

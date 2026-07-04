@@ -4,6 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import requests
@@ -18,6 +19,7 @@ TELEGRAM_MESSAGE_LIMIT = 3500
 class ThreatResponseMode(Enum):
     OFF = "off"
     IDS = "ids"
+    INTERNAL = "internal"
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,8 @@ class TelegramSettings:
 class ThreatResponseSettings:
     mode: ThreatResponseMode
     telegram: TelegramSettings
+    internal_alert_db_path: Path | None = None
+    run_id: str | None = None
 
 
 class ThreatResponder:
@@ -51,6 +55,22 @@ class ThreatResponder:
 
         if self._settings.mode is ThreatResponseMode.IDS:
             self._send_telegram_warning(threat_flows)
+            return
+
+        if self._settings.mode is ThreatResponseMode.INTERNAL:
+            self._persist_internal_alerts(threat_flows)
+            return
+
+    def _persist_internal_alerts(self, threat_flows: list[ClassifiedThreatFlow]) -> None:
+        if self._settings.internal_alert_db_path is None:
+            logger.warning("Internal IDS alert skipped: INTERNAL_ALERT_DB_PATH is missing.")
+            return
+
+        from src.web.alert_store import AlertStore
+
+        store = AlertStore(self._settings.internal_alert_db_path)
+        saved_count = store.add_alerts(self._settings.run_id, threat_flows)
+        logger.info("Internal IDS alert persisted: %s flow(s).", saved_count)
 
     def _send_telegram_warning(self, threat_flows: list[ClassifiedThreatFlow]) -> None:
         if not self._settings.telegram.configured:
