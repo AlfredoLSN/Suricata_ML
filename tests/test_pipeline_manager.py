@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.web.alert_store import AlertStore
-from src.web.pipeline_manager import PipelineManager
+from src.web.pipeline_manager import PipelineManager, PipelineSnapshot
 
 
 class PipelineManagerTest(unittest.TestCase):
@@ -41,6 +41,32 @@ class PipelineManagerTest(unittest.TestCase):
 
             self.assertEqual(snapshot.state, "capturing")
             self.assertTrue(manager.status()["capture_running"])
+
+    def test_status_includes_recent_capture_log_when_capture_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            alert_store = AlertStore(root / "alerts.sqlite3")
+            manager = PipelineManager(root, alert_store)
+            run_id = alert_store.create_run(
+                network_interface="eth0",
+                model_path=str(root / "model.joblib"),
+                ignored_source_ips=[],
+            )
+            manager._snapshot = PipelineSnapshot(state="capturing", run_id=run_id)
+            manager._capture_process = Mock()
+            manager._capture_process.poll.return_value = 1
+            log_path = manager._script_log_path(run_id, Path("src/capture/traffic_capture.py"))
+            log_path.write_text(
+                "[INFO] Iniciando captura continua\n"
+                "[ERROR] sudo: a password is required\n",
+                encoding="utf-8",
+            )
+
+            status = manager.status()
+
+            self.assertEqual(status["state"], "error")
+            self.assertIn("Captura encerrou com codigo 1.", str(status["last_error"]))
+            self.assertIn("sudo: a password is required", str(status["last_error"]))
 
 
 if __name__ == "__main__":

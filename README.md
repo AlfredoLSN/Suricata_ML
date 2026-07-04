@@ -253,6 +253,15 @@ Os fluxos classificados como nao benignos sao persistidos em SQLite e aparecem n
 
 A interface nao resolve permissoes administrativas. A captura ainda depende de `tcpdump`/`sudo` e a extracao ainda depende do `CICFlowMeter` instalado e acessivel pelo ambiente.
 
+Antes de iniciar a captura pela tela web, valide a permissao do sudo no mesmo terminal em que a interface sera executada:
+
+```bash
+sudo -v
+python -m src.web.server
+```
+
+Se a captura encerrar com erro, a interface mostra as ultimas mensagens do processo. Os logs completos de cada execucao ficam em `data/web/logs/`.
+
 ## Principais Dependências
 
 - pandas, numpy, scikit-learn, joblib, requests, seaborn, matplotlib, polars, imbalanced-learn, kagglehub, watchdog, FastAPI, Uvicorn

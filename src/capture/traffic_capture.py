@@ -18,6 +18,7 @@ FORCED_SHUTDOWN_TIMEOUT_SECONDS = 5
 class CaptureSettings:
     network_interface: str
     output_dir: Path
+    sudo_non_interactive: bool = False
 
 
 class ShutdownRequested(Exception):
@@ -25,11 +26,11 @@ class ShutdownRequested(Exception):
 
 
 def info(message: str) -> None:
-    print(f"[INFO] {message}")
+    print(f"[INFO] {message}", flush=True)
 
 
 def error(message: str) -> None:
-    print(f"[ERROR] {message}", file=sys.stderr)
+    print(f"[ERROR] {message}", file=sys.stderr, flush=True)
 
 
 def get_project_root() -> Path:
@@ -44,6 +45,11 @@ def load_settings() -> CaptureSettings:
 
     network_interface = os.getenv("NETWORK_INTERFACE", "").strip()
     output_dir_raw = os.getenv("CAPTURE_OUTPUT_DIR", "data/raw/captures").strip()
+    sudo_non_interactive = os.getenv("CAPTURE_SUDO_NON_INTERACTIVE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
     if not network_interface:
         raise ValueError("A variavel NETWORK_INTERFACE nao foi definida no .env.")
@@ -56,6 +62,7 @@ def load_settings() -> CaptureSettings:
     return CaptureSettings(
         network_interface=network_interface,
         output_dir=output_dir,
+        sudo_non_interactive=sudo_non_interactive,
     )
 
 
@@ -64,7 +71,7 @@ def build_output_pcap_pattern(output_dir: Path) -> Path:
 
 
 def build_capture_command(settings: CaptureSettings) -> list[str]:
-    return [
+    command = [
         "sudo",
         "tcpdump",
         "-i",
@@ -79,6 +86,9 @@ def build_capture_command(settings: CaptureSettings) -> list[str]:
         "-Z",
         "root",
     ]
+    if settings.sudo_non_interactive:
+        command.insert(1, "-n")
+    return command
 
 
 def request_shutdown(signum: int, _frame: object) -> None:

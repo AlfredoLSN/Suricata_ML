@@ -22,6 +22,8 @@ DEFAULT_FLOW_OUTPUT_DIR = "data/processed/flows"
 DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR = "data/processed/classified_flows"
 DEFAULT_CLASSIFICATION_MODEL_PATH = "modelo/pipeline.joblib"
 DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH = "modelo/label_encoder.joblib"
+DEFAULT_WEB_LOG_DIR = "data/web/logs"
+LOG_TAIL_LINES = 8
 
 
 @dataclass(frozen=True)
@@ -103,10 +105,12 @@ class PipelineManager:
                 self._extraction_process = self._start_python_script(
                     Path("src/capture/flow_extraction_service.py"),
                     env=env,
+                    run_id=run_id,
                 )
                 self._capture_process = self._start_python_script(
                     Path("src/capture/traffic_capture.py"),
                     env=env,
+                    run_id=run_id,
                 )
             except Exception as exc:
                 self._snapshot.state = "error"
@@ -207,6 +211,7 @@ class PipelineManager:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(self.project_root)
         env["NETWORK_INTERFACE"] = network_interface
+        env["CAPTURE_SUDO_NON_INTERACTIVE"] = "true"
         env["CAPTURE_OUTPUT_DIR"] = str(self.paths.capture_dir)
         env["FLOW_OUTPUT_DIR"] = str(self.paths.flow_output_dir)
         env["CLASSIFIED_FLOW_OUTPUT_DIR"] = str(self.paths.classified_flow_output_dir)
@@ -222,20 +227,31 @@ class PipelineManager:
         env["PIPELINE_RUN_ID"] = run_id
         return env
 
-    def _start_python_script(self, relative_script: Path, *, env: dict[str, str]) -> subprocess.Popen[str]:
+    def _start_python_script(
+        self,
+        relative_script: Path,
+        *,
+        env: dict[str, str],
+        run_id: str,
+    ) -> subprocess.Popen[str]:
         command = [sys.executable, str(self.project_root / relative_script)]
+        log_path = self._script_log_path(run_id, relative_script)
+        log_file = log_path.open("a", encoding="utf-8")
         kwargs: dict[str, object] = {
             "cwd": str(self.project_root),
             "env": env,
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
+            "stdout": log_file,
+            "stderr": subprocess.STDOUT,
             "text": True,
         }
         if os.name == "nt":
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
-            kwargs["start_new_session"] = True
-        return subprocess.Popen(command, **kwargs)
+            kwargs["process_group"] = 0
+        try:
+            return subprocess.Popen(command, **kwargs)
+        finally:
+            log_file.close()
 
     def _monitor_processes(self) -> None:
         while True:
@@ -252,7 +268,11 @@ class PipelineManager:
         extraction_returncode = self._extraction_process.poll() if self._extraction_process else None
         if capture_returncode not in (None, 0):
             self._snapshot.state = "error"
-            self._snapshot.last_error = f"Captura encerrou com codigo {capture_returncode}."
+            self._snapshot.last_error = self._format_process_error(
+                "Captura",
+                capture_returncode,
+                Path("src/capture/traffic_capture.py"),
+            )
             self.alert_store.add_event(
                 run_id=self._snapshot.run_id,
                 level="ERROR",
@@ -261,7 +281,11 @@ class PipelineManager:
             self.alert_store.finish_run(self._snapshot.run_id, "error")
         if extraction_returncode not in (None, 0):
             self._snapshot.state = "error"
-            self._snapshot.last_error = f"Extracao/classificacao encerrou com codigo {extraction_returncode}."
+            self._snapshot.last_error = self._format_process_error(
+                "Extracao/classificacao",
+                extraction_returncode,
+                Path("src/capture/flow_extraction_service.py"),
+            )
             self.alert_store.add_event(
                 run_id=self._snapshot.run_id,
                 level="ERROR",
@@ -320,6 +344,37 @@ class PipelineManager:
         self.paths.capture_dir.mkdir(parents=True, exist_ok=True)
         self.paths.flow_output_dir.mkdir(parents=True, exist_ok=True)
         self.paths.classified_flow_output_dir.mkdir(parents=True, exist_ok=True)
+        (self.project_root / DEFAULT_WEB_LOG_DIR).mkdir(parents=True, exist_ok=True)
+
+    def _format_process_error(
+        self,
+        process_label: str,
+        returncode: int,
+        relative_script: Path,
+    ) -> str:
+        message = f"{process_label} encerrou com codigo {returncode}."
+        log_tail = self._read_recent_log_lines(relative_script)
+        if log_tail:
+            message = f"{message} Ultimas mensagens: {log_tail}"
+        return message
+
+    def _read_recent_log_lines(self, relative_script: Path) -> str:
+        run_id = self._snapshot.run_id
+        if not run_id:
+            return ""
+        log_path = self._script_log_path(run_id, relative_script)
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return ""
+        useful_lines = [line.strip() for line in lines if line.strip()]
+        return " | ".join(useful_lines[-LOG_TAIL_LINES:])
+
+    def _script_log_path(self, run_id: str, relative_script: Path) -> Path:
+        log_dir = self.project_root / DEFAULT_WEB_LOG_DIR
+        log_dir.mkdir(parents=True, exist_ok=True)
+        script_name = relative_script.stem.replace("_", "-")
+        return log_dir / f"{run_id}-{script_name}.log"
 
     def _file_counts(self) -> tuple[int, int, int]:
         return (
