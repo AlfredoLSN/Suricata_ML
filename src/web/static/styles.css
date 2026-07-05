@@ -238,7 +238,7 @@ button:disabled {
 .classification-table-wrap {
   max-height: 430px;
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid #cbd6e2;
   border-radius: 8px;
   background: #fff;
 }
@@ -246,7 +246,8 @@ button:disabled {
 .classification-table {
   width: 100%;
   min-width: 720px;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .classification-table th {
@@ -254,27 +255,37 @@ button:disabled {
   top: 0;
   z-index: 1;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  background: #f6f9fc;
-  color: var(--muted);
+  border-right: 1px solid #cbd6e2;
+  border-bottom: 1px solid #cbd6e2;
+  background: #eef4f8;
+  color: #435468;
   font-size: 11px;
   font-weight: 850;
   text-align: left;
   text-transform: uppercase;
 }
 
+.classification-table th:last-child {
+  border-right: 0;
+}
+
 .classification-table td {
   padding: 11px 12px;
-  border-bottom: 1px solid #edf1f5;
+  border-right: 1px solid #dde6ef;
+  border-bottom: 1px solid #dde6ef;
   vertical-align: middle;
 }
 
+.classification-table td:last-child {
+  border-right: 0;
+}
+
 .classification-table tbody tr:nth-child(even) {
-  background: #fbfdff;
+  background: #f9fbfd;
 }
 
 .classification-table tbody tr:hover {
-  background: #f2f7fc;
+  background: #edf6ff;
 }
 
 .classification-table tbody tr:last-child td {
