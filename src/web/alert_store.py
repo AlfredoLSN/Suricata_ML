@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,21 @@ class AlertRecord:
     protocol: str | None
     prediction_label: str
     prediction_confidence: float | None
+
+
+@dataclass(frozen=True)
+class ClassificationRecord:
+    id: int
+    run_id: str | None
+    created_at: str
+    source_ip: str | None
+    destination_ip: str | None
+    source_port: str | None
+    destination_port: str | None
+    protocol: str | None
+    prediction_label: str
+    prediction_confidence: float | None
+    file_path: str | None
 
 
 @dataclass(frozen=True)
@@ -80,6 +95,21 @@ class AlertStore:
                     FOREIGN KEY (run_id) REFERENCES pipeline_runs(run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS classifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT,
+                    created_at TEXT NOT NULL,
+                    source_ip TEXT,
+                    destination_ip TEXT,
+                    source_port TEXT,
+                    destination_port TEXT,
+                    protocol TEXT,
+                    prediction_label TEXT NOT NULL,
+                    prediction_confidence REAL,
+                    file_path TEXT,
+                    FOREIGN KEY (run_id) REFERENCES pipeline_runs(run_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS pipeline_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     run_id TEXT,
@@ -95,6 +125,12 @@ class AlertStore:
                     ON alerts(prediction_label);
                 CREATE INDEX IF NOT EXISTS idx_alerts_run_id
                     ON alerts(run_id);
+                CREATE INDEX IF NOT EXISTS idx_classifications_created_at
+                    ON classifications(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_classifications_label
+                    ON classifications(prediction_label);
+                CREATE INDEX IF NOT EXISTS idx_classifications_run_id
+                    ON classifications(run_id);
                 CREATE INDEX IF NOT EXISTS idx_pipeline_events_created_at
                     ON pipeline_events(created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_pipeline_events_run_id
@@ -199,6 +235,53 @@ class AlertStore:
             )
         return len(rows)
 
+    def add_classifications(
+        self,
+        run_id: str | None,
+        classified_flows: Iterable[object],
+        *,
+        file_path: str | None = None,
+    ) -> int:
+        created_at = utc_now_iso()
+        rows = []
+        for classified_flow in classified_flows:
+            rows.append(
+                (
+                    run_id,
+                    created_at,
+                    getattr(classified_flow, "source_ip", None),
+                    getattr(classified_flow, "destination_ip", None),
+                    getattr(classified_flow, "source_port", None),
+                    getattr(classified_flow, "destination_port", None),
+                    getattr(classified_flow, "protocol", None),
+                    str(getattr(classified_flow, "prediction_label")),
+                    getattr(classified_flow, "prediction_confidence", None),
+                    file_path,
+                )
+            )
+        if not rows:
+            return 0
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO classifications (
+                    run_id,
+                    created_at,
+                    source_ip,
+                    destination_ip,
+                    source_port,
+                    destination_port,
+                    protocol,
+                    prediction_label,
+                    prediction_confidence,
+                    file_path
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+        return len(rows)
+
     def list_alerts(
         self,
         *,
@@ -237,6 +320,45 @@ class AlertStore:
             rows = connection.execute(query, params).fetchall()
         return [AlertRecord(**dict(row)) for row in rows]
 
+    def list_classifications(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        label: str | None = None,
+    ) -> list[ClassificationRecord]:
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+        filters: list[str] = []
+        params: list[object] = []
+        if label:
+            filters.append("prediction_label = ?")
+            params.append(label)
+
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        query = f"""
+            SELECT
+                id,
+                run_id,
+                created_at,
+                source_ip,
+                destination_ip,
+                source_port,
+                destination_port,
+                protocol,
+                prediction_label,
+                prediction_confidence,
+                file_path
+            FROM classifications
+            {where_clause}
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [ClassificationRecord(**dict(row)) for row in rows]
+
     def list_events(self, *, limit: int = 10) -> list[PipelineEventRecord]:
         limit = max(1, min(limit, 100))
         with self._connect() as connection:
@@ -255,6 +377,26 @@ class AlertStore:
         with self._connect() as connection:
             row = connection.execute("SELECT COUNT(*) AS count FROM alerts").fetchone()
         return int(row["count"])
+
+    def count_classifications(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) AS count FROM classifications").fetchone()
+        return int(row["count"])
+
+    def classification_counts_by_label(self, *, limit: int = 20) -> dict[str, int]:
+        limit = max(1, min(limit, 100))
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT prediction_label, COUNT(*) AS count
+                FROM classifications
+                GROUP BY prediction_label
+                ORDER BY count DESC, prediction_label ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return {str(row["prediction_label"]): int(row["count"]) for row in rows}
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

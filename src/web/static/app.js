@@ -2,8 +2,6 @@ const stateText = document.querySelector("#stateText");
 const statePill = document.querySelector("#statePill");
 const controlForm = document.querySelector("#controlForm");
 const interfaceSelect = document.querySelector("#interfaceSelect");
-const manualInterface = document.querySelector("#manualInterface");
-const modelSelect = document.querySelector("#modelSelect");
 const ignoredIps = document.querySelector("#ignoredIps");
 const startButton = document.querySelector("#startButton");
 const pauseButton = document.querySelector("#pauseButton");
@@ -13,7 +11,7 @@ const flowCount = document.querySelector("#flowCount");
 const classifiedCount = document.querySelector("#classifiedCount");
 const alertCount = document.querySelector("#alertCount");
 const predictionCounts = document.querySelector("#predictionCounts");
-const recentFiles = document.querySelector("#recentFiles");
+const classificationsList = document.querySelector("#classificationsList");
 const alertsList = document.querySelector("#alertsList");
 
 const stateLabels = {
@@ -40,31 +38,31 @@ async function requestJson(url, options = {}) {
 async function loadConfig() {
   const config = await requestJson("/api/config/options");
   interfaceSelect.innerHTML = "";
+  if (!config.interfaces.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Nenhuma interface detectada";
+    interfaceSelect.appendChild(option);
+  }
   for (const iface of config.interfaces) {
     const option = document.createElement("option");
     option.value = iface;
     option.textContent = iface;
     interfaceSelect.appendChild(option);
   }
-
-  modelSelect.innerHTML = "";
-  for (const model of config.models) {
-    const option = document.createElement("option");
-    option.value = model;
-    option.textContent = model;
-    modelSelect.appendChild(option);
-  }
 }
 
 async function refresh() {
-  const [status, summary, alerts] = await Promise.all([
+  const [status, summary, classifications, alerts] = await Promise.all([
     requestJson("/api/pipeline/status"),
     requestJson("/api/results/summary"),
+    requestJson("/api/results/classifications?limit=30"),
     requestJson("/api/alerts?limit=20"),
   ]);
 
   renderStatus(status);
   renderSummary(summary);
+  renderClassifications(classifications);
   renderAlerts(alerts);
 }
 
@@ -75,11 +73,11 @@ function renderStatus(status) {
   stateText.textContent = status.last_error || buildStatusLine(status);
   pcapCount.textContent = status.pcap_count;
   flowCount.textContent = status.flow_csv_count;
-  classifiedCount.textContent = status.classified_csv_count;
+  classifiedCount.textContent = status.classified_count;
   alertCount.textContent = status.alert_count;
 
   const running = ["starting", "capturing", "pausing", "processing_pending"].includes(status.state);
-  startButton.disabled = running;
+  startButton.disabled = running || !interfaceSelect.value;
   pauseButton.disabled = !["starting", "capturing"].includes(status.state);
 }
 
@@ -105,13 +103,52 @@ function renderSummary(summary) {
       predictionCounts.appendChild(chip);
     }
   }
+}
 
-  recentFiles.innerHTML = "";
-  for (const file of summary.recent_classified_files || []) {
-    const row = document.createElement("div");
-    row.textContent = file;
-    recentFiles.appendChild(row);
+function renderClassifications(classifications) {
+  classificationsList.innerHTML = "";
+  if (!classifications.length) {
+    classificationsList.innerHTML = '<p class="empty">Nenhuma classificacao registrada.</p>';
+    return;
   }
+  const rows = classifications.map((item) => {
+    const confidencePercent = confidencePercentValue(item.prediction_confidence);
+    return `
+      <tr>
+        <td><span class="ip-cell">${escapeHtml(item.source_ip || "-")}</span></td>
+        <td><span class="ip-cell">${escapeHtml(item.destination_ip || "-")}</span></td>
+        <td><span class="ports-cell">${escapeHtml(formatPortPair(item))}</span></td>
+        <td><span class="${classBadgeName(item.prediction_label)}">${escapeHtml(item.prediction_label)}</span></td>
+        <td>
+          <div class="confidence-cell">
+            <div class="confidence-meter" title="${escapeHtml(formatConfidence(item.prediction_confidence))}">
+              <div style="width: ${confidencePercent}%"></div>
+            </div>
+            <strong>${formatConfidence(item.prediction_confidence)}</strong>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  classificationsList.innerHTML = `
+    <div class="classification-table-wrap">
+      <table class="classification-table">
+        <thead>
+          <tr>
+            <th>Origem</th>
+            <th>Destino</th>
+            <th>Portas</th>
+            <th>Classificacao</th>
+            <th>Confianca</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderAlerts(alerts) {
@@ -147,6 +184,27 @@ function formatPorts(alert) {
   return `${source || "porta origem -"} -> ${destination || "porta destino -"}`;
 }
 
+function formatPortPair(item) {
+  const source = item.source_port || "-";
+  const destination = item.destination_port || "-";
+  return `${source} -> ${destination}`;
+}
+
+function confidencePercentValue(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Number(value) * 100));
+}
+
+function classBadgeName(label) {
+  const normalized = String(label || "").trim().toLowerCase();
+  if (["benign", "benigno", "0"].includes(normalized)) {
+    return "class-badge benign";
+  }
+  return "class-badge threat";
+}
+
 function formatConfidence(value) {
   if (value === null || value === undefined) {
     return "conf. -";
@@ -174,7 +232,7 @@ function escapeHtml(value) {
 controlForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   errorText.textContent = "";
-  const selectedInterface = manualInterface.value.trim() || interfaceSelect.value;
+  const selectedInterface = interfaceSelect.value;
   const ips = ignoredIps.value
     .split(",")
     .map((item) => item.trim())
@@ -184,7 +242,6 @@ controlForm.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({
         network_interface: selectedInterface,
-        model_path: modelSelect.value,
         ignored_source_ips: ips,
       }),
     });

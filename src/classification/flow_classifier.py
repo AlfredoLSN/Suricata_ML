@@ -11,6 +11,9 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+BASIC_FLOW_COLUMNS = ("Src IP", "Dst IP", "Src Port", "Dst Port", "Protocol")
+
+
 FEATURE_COLUMN_ALIASES = {
     "Flow Duration": ["Flow Duration"],
     "Total Fwd Packets": ["Total Fwd Packets", "Total Fwd Packet"],
@@ -99,7 +102,7 @@ FEATURE_COLUMN_ALIASES = {
 
 
 @dataclass(frozen=True)
-class ClassifiedThreatFlow:
+class ClassifiedFlow:
     source_ip: str | None
     destination_ip: str | None
     source_port: str | None
@@ -109,15 +112,19 @@ class ClassifiedThreatFlow:
     prediction_confidence: float | None
 
 
+ClassifiedThreatFlow = ClassifiedFlow
+
+
 @dataclass(frozen=True)
 class ClassificationResult:
     input_csv: Path
-    output_csv: Path
+    output_csv: Path | None
     rows_before_filter: int
     rows_removed_by_src_ip: int
     rows_removed_by_invalid_features: int
     rows_classified: int
     prediction_counts: dict[str, int]
+    classified_flows: list[ClassifiedFlow]
     threat_flows: list[ClassifiedThreatFlow]
 
 
@@ -148,15 +155,18 @@ class FlowClassifier:
         }
         self._remove_src_ip = remove_src_ip
 
-    def classify_file(self, input_csv: Path, output_csv: Path) -> ClassificationResult:
+    def classify_file(
+        self,
+        input_csv: Path,
+        output_csv: Path | None = None,
+    ) -> ClassificationResult:
         df = pd.read_csv(input_csv)
         df.columns = df.columns.str.strip()
         rows_before_filter = len(df)
         df, rows_removed_by_src_ip = self._filter_source_ip(df)
 
         if df.empty:
-            output_csv.parent.mkdir(parents=True, exist_ok=True)
-            df.to_csv(output_csv, index=False)
+            self._write_optional_output(df, output_csv)
             return ClassificationResult(
                 input_csv=input_csv,
                 output_csv=output_csv,
@@ -165,6 +175,7 @@ class FlowClassifier:
                 rows_removed_by_invalid_features=0,
                 rows_classified=0,
                 prediction_counts={},
+                classified_flows=[],
                 threat_flows=[],
             )
 
@@ -175,8 +186,7 @@ class FlowClassifier:
         )
 
         if features.empty:
-            output_csv.parent.mkdir(parents=True, exist_ok=True)
-            features.to_csv(output_csv, index=False)
+            self._write_optional_output(features, output_csv)
             return ClassificationResult(
                 input_csv=input_csv,
                 output_csv=output_csv,
@@ -185,12 +195,13 @@ class FlowClassifier:
                 rows_removed_by_invalid_features=rows_removed_by_invalid_features,
                 rows_classified=0,
                 prediction_counts={},
+                classified_flows=[],
                 threat_flows=[],
             )
 
         predictions = self._model.predict(features)
 
-        output_df = features.copy()
+        output_df = self._build_output_frame(df, features)
         output_df["Prediction"] = predictions
         output_df["Prediction Label"] = [
             self._format_label(prediction) for prediction in predictions
@@ -200,10 +211,10 @@ class FlowClassifier:
             probabilities = self._model.predict_proba(features)
             output_df["Prediction Confidence"] = probabilities.max(axis=1)
 
-        output_csv.parent.mkdir(parents=True, exist_ok=True)
-        output_df.to_csv(output_csv, index=False)
+        self._write_optional_output(output_df, output_csv)
 
         prediction_counts = output_df["Prediction Label"].value_counts().to_dict()
+        classified_flows = self._build_classified_flows(df, output_df)
         threat_flows = self._build_threat_flows(df, output_df)
         return ClassificationResult(
             input_csv=input_csv,
@@ -213,8 +224,29 @@ class FlowClassifier:
             rows_removed_by_invalid_features=rows_removed_by_invalid_features,
             rows_classified=len(output_df),
             prediction_counts={str(label): int(count) for label, count in prediction_counts.items()},
+            classified_flows=classified_flows,
             threat_flows=threat_flows,
         )
+
+    @staticmethod
+    def _write_optional_output(output_df: pd.DataFrame, output_csv: Path | None) -> None:
+        if output_csv is None:
+            return
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        output_df.to_csv(output_csv, index=False)
+
+    def _build_output_frame(
+        self,
+        original_df: pd.DataFrame,
+        features: pd.DataFrame,
+    ) -> pd.DataFrame:
+        metadata_columns = [
+            column for column in BASIC_FLOW_COLUMNS
+            if column in original_df.columns and column not in features.columns
+        ]
+        if not metadata_columns:
+            return features.copy()
+        return pd.concat([original_df.loc[features.index, metadata_columns], features], axis=1)
 
     def _load_label_encoder(self, label_encoder_path: Path | None) -> object | None:
         if label_encoder_path is None:
@@ -323,6 +355,16 @@ class FlowClassifier:
 
         return str(prediction)
 
+    def _build_classified_flows(
+        self,
+        original_df: pd.DataFrame,
+        output_df: pd.DataFrame,
+    ) -> list[ClassifiedFlow]:
+        classified_flows: list[ClassifiedFlow] = []
+        for index in output_df.index:
+            classified_flows.append(self._build_classified_flow(original_df, output_df, index))
+        return classified_flows
+
     def _build_threat_flows(
         self,
         original_df: pd.DataFrame,
@@ -333,23 +375,29 @@ class FlowClassifier:
         benign_mask = prediction_labels.str.strip().str.upper().isin(self._benign_label_names)
 
         for index in output_df.index[~benign_mask]:
-            threat_flows.append(
-                ClassifiedThreatFlow(
-                    source_ip=self._read_optional_value(original_df, index, "Src IP"),
-                    destination_ip=self._read_optional_value(original_df, index, "Dst IP"),
-                    source_port=self._read_optional_value(original_df, index, "Src Port"),
-                    destination_port=self._read_optional_value(original_df, index, "Dst Port"),
-                    protocol=self._read_optional_value(original_df, index, "Protocol"),
-                    prediction_label=str(output_df.at[index, "Prediction Label"]),
-                    prediction_confidence=self._read_optional_float(
-                        output_df,
-                        index,
-                        "Prediction Confidence",
-                    ),
-                )
-            )
+            threat_flows.append(self._build_classified_flow(original_df, output_df, index))
 
         return threat_flows
+
+    def _build_classified_flow(
+        self,
+        original_df: pd.DataFrame,
+        output_df: pd.DataFrame,
+        index: object,
+    ) -> ClassifiedFlow:
+        return ClassifiedFlow(
+            source_ip=self._read_optional_value(original_df, index, "Src IP"),
+            destination_ip=self._read_optional_value(original_df, index, "Dst IP"),
+            source_port=self._read_optional_value(original_df, index, "Src Port"),
+            destination_port=self._read_optional_value(original_df, index, "Dst Port"),
+            protocol=self._read_optional_value(original_df, index, "Protocol"),
+            prediction_label=str(output_df.at[index, "Prediction Label"]),
+            prediction_confidence=self._read_optional_float(
+                output_df,
+                index,
+                "Prediction Confidence",
+            ),
+        )
 
     def _read_optional_value(
         self,

@@ -15,12 +15,12 @@ except ModuleNotFoundError:  # pragma: no cover
 
 @unittest.skipIf(StartPipelineRequest is None, "pydantic is not installed")
 class SchemaTest(unittest.TestCase):
-    def test_start_request_requires_interface_and_model(self) -> None:
+    def test_start_request_requires_interface(self) -> None:
         with self.assertRaises(ValidationError):
-            StartPipelineRequest(network_interface="", model_path="")
+            StartPipelineRequest(network_interface="")
 
     def test_start_request_accepts_ignored_ips_default(self) -> None:
-        request = StartPipelineRequest(network_interface="eth0", model_path="modelo/model.joblib")
+        request = StartPipelineRequest(network_interface="eth0")
         self.assertEqual(request.ignored_source_ips, [])
 
 

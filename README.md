@@ -76,7 +76,6 @@ CICFLOWMETER_CWD=
 CLASSIFICATION_ENABLED=false
 CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
 CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
-CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
 CLASSIFICATION_LABELS=
 CLASSIFICATION_BENIGN_LABELS=BENIGN,0
 CLASSIFICATION_EXCLUDED_SRC_IP=
@@ -129,7 +128,6 @@ CICFLOWMETER_CWD=
 CLASSIFICATION_ENABLED=false
 CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
 CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
-CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
 CLASSIFICATION_LABELS=
 CLASSIFICATION_BENIGN_LABELS=BENIGN,0
 CLASSIFICATION_EXCLUDED_SRC_IP=
@@ -166,10 +164,9 @@ Para classificar cada CSV logo apos uma extracao bem-sucedida do CICFlowMeter, h
 CLASSIFICATION_ENABLED=true
 CLASSIFICATION_MODEL_PATH=modelo/pipeline.joblib
 CLASSIFICATION_LABEL_ENCODER_PATH=modelo/label_encoder.joblib
-CLASSIFIED_FLOW_OUTPUT_DIR=data/processed/classified_flows
 ```
 
-O servico carrega o pipeline treinado, usa as colunas de `feature_names_in_` salvas no pipeline ou em seus steps, decodifica as predicoes com `label_encoder.joblib` quando disponivel, adiciona as colunas `Prediction`, `Prediction Label` e, quando disponivel, `Prediction Confidence`, e grava um novo CSV em `data/processed/classified_flows/`.
+O servico carrega o pipeline treinado, usa as colunas de `feature_names_in_` salvas no pipeline ou em seus steps, decodifica as predicoes com `label_encoder.joblib` quando disponivel e grava as classificacoes no SQLite configurado por `INTERNAL_ALERT_DB_PATH`.
 
 Antes da inferencia, o CSV do CICFlowMeter e preparado para bater com as colunas do treino: nomes alternativos como `Total Fwd Packet`, `Total Bwd packets`, `Packet Length Min`, `FWD Init Win Bytes` e outros sao mapeados para os nomes esperados pelo modelo. Valores nao numericos sao convertidos para `NaN`; o tratamento de `Infinity`, `-Infinity` e valores ausentes fica a cargo do proprio pipeline (`ReplaceInfWithNan` e `SimpleImputer`). Se uma feature esperada nao existir no CSV, a classificacao daquele arquivo falha com log explicito em vez de predizer com colunas erradas.
 
@@ -232,10 +229,9 @@ http://127.0.0.1:8000
 ### 3) O que a tela permite configurar
 
 - Interface de rede, detectada automaticamente via `psutil`.
-- Modelo `.joblib` usado na classificacao.
 - IPs de origem ignorados antes da classificacao.
 
-As demais configuracoes operacionais continuam padronizadas na primeira versao: diretorios de captura/flows, quantidade de workers, rotacao de PCAP em 60 segundos, labels benignas `BENIGN,0` e modo de alerta interno.
+O modelo `.joblib` usado na classificacao vem da configuracao `CLASSIFICATION_MODEL_PATH` no `.env`. As demais configuracoes operacionais continuam padronizadas na primeira versao: diretorios de captura/flows, quantidade de workers, rotacao de PCAP em 60 segundos, labels benignas `BENIGN,0` e modo de alerta interno.
 
 ### 4) Alertas internos
 

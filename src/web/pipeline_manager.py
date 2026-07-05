@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
-
 from src.web.alert_store import AlertStore
 
 
@@ -19,7 +17,6 @@ PROCESS_STOP_TIMEOUT_SECONDS = 15
 EXTRACTION_QUIET_SECONDS = 8
 DEFAULT_CAPTURE_OUTPUT_DIR = "data/raw/captures"
 DEFAULT_FLOW_OUTPUT_DIR = "data/processed/flows"
-DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR = "data/processed/classified_flows"
 DEFAULT_CLASSIFICATION_MODEL_PATH = "modelo/pipeline.joblib"
 DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH = "modelo/label_encoder.joblib"
 DEFAULT_WEB_LOG_DIR = "data/web/logs"
@@ -30,7 +27,6 @@ LOG_TAIL_LINES = 8
 class PipelinePaths:
     capture_dir: Path
     flow_output_dir: Path
-    classified_flow_output_dir: Path
     alert_db_path: Path
 
 
@@ -52,7 +48,6 @@ class PipelineManager:
         self.paths = PipelinePaths(
             capture_dir=project_root / DEFAULT_CAPTURE_OUTPUT_DIR,
             flow_output_dir=project_root / DEFAULT_FLOW_OUTPUT_DIR,
-            classified_flow_output_dir=project_root / DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR,
             alert_db_path=alert_store.db_path,
         )
         self._lock = threading.RLock()
@@ -167,38 +162,28 @@ class PipelineManager:
                 "last_error": snapshot.last_error,
                 "pcap_count": self._count_files(self.paths.capture_dir, "*.pcap"),
                 "flow_csv_count": self._count_files(self.paths.flow_output_dir, "*.csv"),
-                "classified_csv_count": self._count_files(
-                    self.paths.classified_flow_output_dir,
-                    "*.csv",
-                ),
+                "classified_count": self.alert_store.count_classifications(),
                 "alert_count": self.alert_store.count_alerts(),
                 "capture_running": self._is_running(self._capture_process),
                 "extraction_running": self._is_running(self._extraction_process),
             }
 
     def result_summary(self) -> dict[str, object]:
-        prediction_counts: dict[str, int] = {}
-        recent_files = sorted(
-            self.paths.classified_flow_output_dir.glob("*.csv"),
-            key=lambda path: path.stat().st_mtime,
-            reverse=True,
-        )[:5]
-        for csv_path in recent_files:
-            try:
-                df = pd.read_csv(csv_path, usecols=["Prediction Label"])
-            except Exception:
-                continue
-            counts = df["Prediction Label"].astype(str).value_counts().to_dict()
-            for label, count in counts.items():
-                prediction_counts[str(label)] = prediction_counts.get(str(label), 0) + int(count)
+        prediction_counts = self.alert_store.classification_counts_by_label()
 
         return {
             "prediction_counts": prediction_counts,
-            "recent_classified_files": [str(path.relative_to(self.project_root)) for path in recent_files],
             "recent_events": [
                 event.__dict__ for event in self.alert_store.list_events(limit=10)
             ],
         }
+
+    def recent_classifications(self, limit: int = 50, offset: int = 0) -> list[dict[str, object]]:
+        records = [
+            record.__dict__
+            for record in self.alert_store.list_classifications(limit=limit, offset=offset)
+        ]
+        return records
 
     def _build_child_environment(
         self,
@@ -214,7 +199,6 @@ class PipelineManager:
         env["CAPTURE_SUDO_NON_INTERACTIVE"] = "true"
         env["CAPTURE_OUTPUT_DIR"] = str(self.paths.capture_dir)
         env["FLOW_OUTPUT_DIR"] = str(self.paths.flow_output_dir)
-        env["CLASSIFIED_FLOW_OUTPUT_DIR"] = str(self.paths.classified_flow_output_dir)
         env["CLASSIFICATION_ENABLED"] = "true"
         env["CLASSIFICATION_MODEL_PATH"] = str(model_path)
         default_encoder = self.project_root / DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH
@@ -343,7 +327,6 @@ class PipelineManager:
     def _ensure_directories(self) -> None:
         self.paths.capture_dir.mkdir(parents=True, exist_ok=True)
         self.paths.flow_output_dir.mkdir(parents=True, exist_ok=True)
-        self.paths.classified_flow_output_dir.mkdir(parents=True, exist_ok=True)
         (self.project_root / DEFAULT_WEB_LOG_DIR).mkdir(parents=True, exist_ok=True)
 
     def _format_process_error(
@@ -380,7 +363,7 @@ class PipelineManager:
         return (
             self._count_files(self.paths.capture_dir, "*.pcap"),
             self._count_files(self.paths.flow_output_dir, "*.csv"),
-            self._count_files(self.paths.classified_flow_output_dir, "*.csv"),
+            self.alert_store.count_classifications(),
         )
 
     @staticmethod
@@ -395,14 +378,3 @@ class PipelineManager:
 
     def _copy_snapshot_locked(self) -> PipelineSnapshot:
         return PipelineSnapshot(**self._snapshot.__dict__)
-
-
-def discover_model_paths(project_root: Path) -> list[str]:
-    model_dir = project_root / "modelo"
-    candidates = []
-    if model_dir.is_dir():
-        candidates.extend(model_dir.glob("*.joblib"))
-    default_model = project_root / DEFAULT_CLASSIFICATION_MODEL_PATH
-    if default_model.is_file() and default_model not in candidates:
-        candidates.insert(0, default_model)
-    return [str(path.relative_to(project_root)) for path in sorted(candidates)]

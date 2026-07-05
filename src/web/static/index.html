@@ -26,12 +26,6 @@
             Interface de rede
             <select id="interfaceSelect"></select>
           </label>
-          <input id="manualInterface" type="text" placeholder="Ou digite a interface manualmente" />
-
-          <label>
-            Modelo
-            <select id="modelSelect"></select>
-          </label>
 
           <label>
             IPs de origem ignorados
@@ -56,7 +50,7 @@
               <strong id="flowCount">0</strong>
             </article>
             <article>
-              <span>Classificados</span>
+              <span>Classificacoes</span>
               <strong id="classifiedCount">0</strong>
             </article>
             <article>
@@ -70,7 +64,13 @@
               <h2>Resumo</h2>
             </div>
             <div id="predictionCounts" class="chips"></div>
-            <div id="recentFiles" class="file-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Classificacoes</h2>
+            </div>
+            <div id="classificationsList" class="classifications-list"></div>
           </section>
 
           <section class="panel">
@@ -83,6 +83,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260705-sqlite-only"></script>
   </body>
 </html>

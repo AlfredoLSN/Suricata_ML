@@ -43,10 +43,29 @@ class AlertStoreTest(unittest.TestCase):
                     )
                 ],
             )
+            classifications_saved = store.add_classifications(
+                run_id,
+                [
+                    FakeThreatFlow(
+                        source_ip="10.0.0.3",
+                        destination_ip="10.0.0.4",
+                        source_port="53",
+                        destination_port="53000",
+                        protocol="17",
+                        prediction_label="BENIGN",
+                        prediction_confidence=0.99,
+                    )
+                ],
+                file_path=None,
+            )
 
             self.assertEqual(saved, 1)
+            self.assertEqual(classifications_saved, 1)
             self.assertEqual(store.count_alerts(), 1)
+            self.assertEqual(store.count_classifications(), 1)
             self.assertEqual(store.list_alerts()[0].prediction_label, "DOS")
+            self.assertEqual(store.list_classifications()[0].prediction_label, "BENIGN")
+            self.assertEqual(store.classification_counts_by_label(), {"BENIGN": 1})
             self.assertEqual(store.list_events()[0].message, "started")
 
 

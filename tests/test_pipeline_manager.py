@@ -68,6 +68,36 @@ class PipelineManagerTest(unittest.TestCase):
             self.assertIn("Captura encerrou com codigo 1.", str(status["last_error"]))
             self.assertIn("sudo: a password is required", str(status["last_error"]))
 
+    def test_recent_classifications_reads_basic_flow_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            alert_store = AlertStore(root / "alerts.sqlite3")
+            manager = PipelineManager(root, alert_store)
+            alert_store.add_classifications(
+                "run-1",
+                [
+                    Mock(
+                        source_ip="10.0.0.1",
+                        destination_ip="10.0.0.2",
+                        source_port="12345",
+                        destination_port="443",
+                        protocol="6",
+                        prediction_label="DOS",
+                        prediction_confidence=0.97,
+                    )
+                ],
+                file_path="classified.csv",
+            )
+
+            records = manager.recent_classifications(limit=10)
+
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["source_ip"], "10.0.0.1")
+            self.assertEqual(records[0]["destination_ip"], "10.0.0.2")
+            self.assertEqual(records[0]["prediction_label"], "DOS")
+            self.assertAlmostEqual(records[0]["prediction_confidence"], 0.97)
+            self.assertEqual(manager.recent_classifications(limit=10, offset=1), [])
+
 
 if __name__ == "__main__":
     unittest.main()

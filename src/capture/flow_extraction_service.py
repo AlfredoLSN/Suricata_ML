@@ -26,10 +26,10 @@ from src.response.threat_response import (
     ThreatResponseSettings,
     parse_threat_response_mode,
 )
+from src.web.alert_store import AlertStore
 
 DEFAULT_CAPTURE_OUTPUT_DIR = "data/raw/captures"
 DEFAULT_FLOW_OUTPUT_DIR = "data/processed/flows"
-DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR = "data/processed/classified_flows"
 DEFAULT_WORKER_COUNT = 1
 DEFAULT_CICFLOWMETER_BIN = "cicflowmeter"
 DEFAULT_CLASSIFICATION_MODEL_PATH = "modelo/pipeline.joblib"
@@ -50,7 +50,6 @@ class FlowExtractionSettings:
     classification_enabled: bool
     classification_model_path: Path
     classification_label_encoder_path: Path | None
-    classified_flow_output_dir: Path
     classification_label_names: list[str]
     classification_benign_label_names: list[str]
     classification_excluded_src_ips: list[str]
@@ -120,10 +119,6 @@ def load_settings() -> FlowExtractionSettings:
         project_root,
         os.getenv("FLOW_OUTPUT_DIR", DEFAULT_FLOW_OUTPUT_DIR),
     )
-    classified_flow_output_dir = resolve_project_path(
-        project_root,
-        os.getenv("CLASSIFIED_FLOW_OUTPUT_DIR", DEFAULT_CLASSIFIED_FLOW_OUTPUT_DIR),
-    )
     worker_count = parse_worker_count(os.getenv("FLOW_WORKER_COUNT", ""))
     cicflowmeter_bin = os.getenv("CICFLOWMETER_BIN", DEFAULT_CICFLOWMETER_BIN).strip()
     cicflowmeter_cwd = resolve_optional_project_path(
@@ -184,8 +179,6 @@ def load_settings() -> FlowExtractionSettings:
 
     capture_dir.mkdir(parents=True, exist_ok=True)
     flow_output_dir.mkdir(parents=True, exist_ok=True)
-    if classification_enabled:
-        classified_flow_output_dir.mkdir(parents=True, exist_ok=True)
 
     return FlowExtractionSettings(
         capture_dir=capture_dir,
@@ -196,7 +189,6 @@ def load_settings() -> FlowExtractionSettings:
         classification_enabled=classification_enabled,
         classification_model_path=classification_model_path,
         classification_label_encoder_path=classification_label_encoder_path,
-        classified_flow_output_dir=classified_flow_output_dir,
         classification_label_names=classification_label_names,
         classification_benign_label_names=classification_benign_label_names,
         classification_excluded_src_ips=classification_excluded_src_ips,
@@ -359,21 +351,20 @@ def classify_generated_flow_csvs(
         return
 
     for flow_csv in flow_csvs:
-        output_csv = settings.classified_flow_output_dir / build_classified_csv_name(flow_csv)
         try:
-            result = classifier.classify_file(flow_csv, output_csv)
+            result = classifier.classify_file(flow_csv)
         except Exception:
             logger.exception("Classification failed for generated CSV: %s", flow_csv)
             continue
 
         logger.info(
-            "Classification finished: %s -> %s | rows=%s | invalid_rows_removed=%s | predictions=%s",
+            "Classification finished: %s -> SQLite | rows=%s | invalid_rows_removed=%s | predictions=%s",
             result.input_csv,
-            result.output_csv,
             result.rows_classified,
             result.rows_removed_by_invalid_features,
             result.prediction_counts,
         )
+        persist_classifications(settings, result)
         threat_responder.handle_threat_flows(result.threat_flows)
         if result.rows_removed_by_src_ip:
             logger.info(
@@ -382,6 +373,23 @@ def classify_generated_flow_csvs(
                 result.rows_before_filter,
                 ", ".join(settings.classification_excluded_src_ips),
             )
+
+
+def persist_classifications(settings: FlowExtractionSettings, result: object) -> None:
+    db_path = settings.threat_response_settings.internal_alert_db_path
+    if db_path is None:
+        return
+    try:
+        saved_count = AlertStore(db_path).add_classifications(
+            settings.threat_response_settings.run_id,
+            getattr(result, "classified_flows", []),
+            file_path=None,
+        )
+    except Exception:
+        logger.exception("Failed to persist classification rows in internal store.")
+        return
+    if saved_count:
+        logger.info("Internal classification rows persisted: %s flow(s).", saved_count)
 
 
 def find_generated_flow_csvs(
@@ -406,10 +414,6 @@ def find_generated_flow_csvs(
         if path.is_file() and path.stat().st_mtime >= extraction_started_at
     ]
     return sorted(candidates, key=lambda path: path.stat().st_mtime)
-
-
-def build_classified_csv_name(flow_csv: Path) -> str:
-    return f"{flow_csv.stem}_classified{flow_csv.suffix}"
 
 
 def log_subprocess_output(stdout: str | None, stderr: str | None) -> None:
