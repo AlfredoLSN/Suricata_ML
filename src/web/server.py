@@ -117,6 +117,15 @@ def recent_classifications(
     ]
 
 
+@app.post("/api/testing/inject-attack", response_model=ClassificationResponse)
+def inject_attack_instance() -> ClassificationResponse:
+    try:
+        record = pipeline_manager.inject_test_attack_instance(configured_model_path())
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ClassificationResponse(**record)
+
+
 def configured_model_path() -> Path:
     return resolve_config_path(
         os.getenv("CLASSIFICATION_MODEL_PATH", DEFAULT_CLASSIFICATION_MODEL_PATH)

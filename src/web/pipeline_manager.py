@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
+from src.classification.flow_classifier import FlowClassifier
 from src.web.alert_store import AlertStore
 
 
@@ -21,6 +24,77 @@ DEFAULT_CLASSIFICATION_MODEL_PATH = "modelo/pipeline.joblib"
 DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH = "modelo/label_encoder.joblib"
 DEFAULT_WEB_LOG_DIR = "data/web/logs"
 LOG_TAIL_LINES = 8
+TEST_ATTACK_FLOW = {
+    "Src IP": "10.10.10.10",
+    "Dst IP": "192.168.2.160",
+    "Src Port": "4444",
+    "Dst Port": "80",
+    "Protocol": "6",
+    "Flow Duration": 86086952,
+    "Total Fwd Packets": 4,
+    "Total Backward Packets": 6,
+    "Total Length of Fwd Packets": 300,
+    "Total Length of Bwd Packets": 11595,
+    "Fwd Packet Length Max": 294,
+    "Fwd Packet Length Min": 0,
+    "Fwd Packet Length Mean": 75.0,
+    "Fwd Packet Length Std": 146.0273947,
+    "Bwd Packet Length Max": 5792,
+    "Bwd Packet Length Min": 0,
+    "Bwd Packet Length Mean": 1932.5,
+    "Bwd Packet Length Std": 2181.008184,
+    "Flow Bytes/s": 138.1742497,
+    "Flow Packets/s": 0.116161622,
+    "Flow IAT Mean": 9565216.889,
+    "Flow IAT Std": 28600000.0,
+    "Flow IAT Max": 85900000,
+    "Flow IAT Min": 30,
+    "Fwd IAT Total": 86000000,
+    "Fwd IAT Mean": 28700000.0,
+    "Fwd IAT Std": 49600000.0,
+    "Fwd IAT Max": 85900000,
+    "Fwd IAT Min": 1964,
+    "Bwd IAT Total": 147407,
+    "Bwd IAT Mean": 29481.4,
+    "Bwd IAT Std": 57754.102,
+    "Bwd IAT Max": 132151,
+    "Bwd IAT Min": 46,
+    "Fwd PSH Flags": 0,
+    "Fwd Header Length": 124,
+    "Bwd Header Length": 200,
+    "Fwd Packets/s": 0.046464649,
+    "Bwd Packets/s": 0.069696973,
+    "Min Packet Length": 0,
+    "Max Packet Length": 5792,
+    "Packet Length Mean": 1081.909091,
+    "Packet Length Std": 1827.622196,
+    "Packet Length Variance": 3340202.891,
+    "FIN Flag Count": 1,
+    "SYN Flag Count": 0,
+    "PSH Flag Count": 0,
+    "ACK Flag Count": 0,
+    "Down/Up Ratio": 1,
+    "Average Packet Size": 1190.1,
+    "Avg Fwd Segment Size": 75.0,
+    "Avg Bwd Segment Size": 1932.5,
+    "Subflow Fwd Packets": 4,
+    "Subflow Fwd Bytes": 300,
+    "Subflow Bwd Packets": 6,
+    "Subflow Bwd Bytes": 11595,
+    "Init_Win_bytes_forward": 0,
+    "Init_Win_bytes_backward": 235,
+    "act_data_pkt_fwd": 1,
+    "min_seg_size_forward": 20,
+    "Active Mean": 0.0,
+    "Active Std": 0.0,
+    "Active Max": 0,
+    "Active Min": 0,
+    "Idle Mean": 85900000.0,
+    "Idle Std": 0.0,
+    "Idle Max": 85900000,
+    "Idle Min": 85900000,
+}
+BENIGN_LABELS = {"BENIGN", "0"}
 
 
 @dataclass(frozen=True)
@@ -186,6 +260,50 @@ class PipelineManager:
             for record in self.alert_store.list_classifications(limit=limit, offset=offset)
         ]
         return records
+
+    def inject_test_attack_instance(self, model_path: Path) -> dict[str, object]:
+        if not model_path.is_file():
+            raise ValueError(f"Modelo nao encontrado: {model_path}")
+
+        label_encoder_path = self.project_root / DEFAULT_CLASSIFICATION_LABEL_ENCODER_PATH
+        classifier = FlowClassifier(
+            model_path=model_path,
+            label_encoder_path=label_encoder_path if label_encoder_path.is_file() else None,
+            benign_label_names=sorted(BENIGN_LABELS),
+            remove_src_ip=False,
+        )
+        result = classifier.classify_dataframe(
+            pd.DataFrame([TEST_ATTACK_FLOW]),
+            input_name="manual-test-attack",
+        )
+        if not result.classified_flows:
+            raise ValueError("Instancia de teste nao gerou classificacao.")
+
+        with self._lock:
+            run_id = self._snapshot.run_id
+        saved_count = self.alert_store.add_classifications(
+            run_id,
+            result.classified_flows,
+            file_path=None,
+        )
+        threat_flows = [
+            flow for flow in result.classified_flows
+            if flow.prediction_label.strip().upper() not in BENIGN_LABELS
+        ]
+        alert_count = self.alert_store.add_alerts(run_id, threat_flows)
+        self.alert_store.add_event(
+            run_id=run_id,
+            level="INFO",
+            message=(
+                "Instancia manual de teste classificada: "
+                f"{result.classified_flows[0].prediction_label}."
+            ),
+        )
+
+        latest = self.alert_store.list_classifications(limit=1)[0].__dict__
+        latest["saved_count"] = saved_count
+        latest["alert_count"] = alert_count
+        return latest
 
     def _build_child_environment(
         self,

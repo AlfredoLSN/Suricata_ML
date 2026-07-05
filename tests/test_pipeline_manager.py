@@ -5,8 +5,22 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import joblib
+import numpy as np
+import pandas as pd
+
 from src.web.alert_store import AlertStore
 from src.web.pipeline_manager import PipelineManager, PipelineSnapshot
+
+
+class FakeModel:
+    feature_names_in_ = ["Flow Duration", "Total Fwd Packets"]
+
+    def predict(self, features: pd.DataFrame) -> list[int]:
+        return [1 for _ in range(len(features))]
+
+    def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+        return np.array([[0.1, 0.9] for _ in range(len(features))])
 
 
 class PipelineManagerTest(unittest.TestCase):
@@ -97,6 +111,21 @@ class PipelineManagerTest(unittest.TestCase):
             self.assertEqual(records[0]["prediction_label"], "DOS")
             self.assertAlmostEqual(records[0]["prediction_confidence"], 0.97)
             self.assertEqual(manager.recent_classifications(limit=10, offset=1), [])
+
+    def test_inject_test_attack_instance_persists_classification_and_alert(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            model_path = root / "modelo" / "model.joblib"
+            model_path.parent.mkdir(parents=True)
+            joblib.dump(FakeModel(), model_path)
+            alert_store = AlertStore(root / "alerts.sqlite3")
+            manager = PipelineManager(root, alert_store)
+
+            record = manager.inject_test_attack_instance(model_path)
+
+            self.assertEqual(record["prediction_label"], "1")
+            self.assertEqual(alert_store.count_classifications(), 1)
+            self.assertEqual(alert_store.count_alerts(), 1)
 
 
 if __name__ == "__main__":

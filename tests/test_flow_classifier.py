@@ -59,6 +59,32 @@ class FlowClassifierTest(unittest.TestCase):
             self.assertEqual(result.classified_flows[0].prediction_label, "DOS")
             self.assertAlmostEqual(result.classified_flows[0].prediction_confidence, 0.92)
 
+    def test_classifies_dataframe_without_csv_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            model_path = root / "model.joblib"
+            joblib.dump(FakeModel(), model_path)
+            classifier = FlowClassifier(
+                model_path=model_path,
+                label_names=["BENIGN", "DOS"],
+                benign_label_names=["BENIGN"],
+                remove_src_ip=False,
+            )
+
+            result = classifier.classify_dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Flow Duration": 100,
+                            "Total Fwd Packets": 4,
+                        }
+                    ]
+                )
+            )
+
+            self.assertEqual(result.rows_classified, 1)
+            self.assertEqual(result.classified_flows[0].prediction_label, "DOS")
+
 
 if __name__ == "__main__":
     unittest.main()

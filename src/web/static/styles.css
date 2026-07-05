@@ -141,6 +141,10 @@ input {
   margin-top: 6px;
 }
 
+.actions .wide {
+  grid-column: 1 / -1;
+}
+
 button {
   min-height: 42px;
   border: 0;

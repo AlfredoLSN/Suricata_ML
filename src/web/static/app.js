@@ -5,6 +5,7 @@ const interfaceSelect = document.querySelector("#interfaceSelect");
 const ignoredIps = document.querySelector("#ignoredIps");
 const startButton = document.querySelector("#startButton");
 const pauseButton = document.querySelector("#pauseButton");
+const injectAttackButton = document.querySelector("#injectAttackButton");
 const errorText = document.querySelector("#errorText");
 const pcapCount = document.querySelector("#pcapCount");
 const flowCount = document.querySelector("#flowCount");
@@ -96,6 +97,7 @@ function renderStatus(status) {
   const running = ["starting", "capturing", "pausing", "processing_pending"].includes(status.state);
   startButton.disabled = running || !interfaceSelect.value;
   pauseButton.disabled = !["starting", "capturing"].includes(status.state);
+  injectAttackButton.disabled = false;
 }
 
 function buildStatusLine(status) {
@@ -296,6 +298,20 @@ pauseButton.addEventListener("click", async () => {
     await refresh();
   } catch (error) {
     errorText.textContent = error.message;
+  }
+});
+
+injectAttackButton.addEventListener("click", async () => {
+  errorText.textContent = "";
+  injectAttackButton.disabled = true;
+  try {
+    await requestJson("/api/testing/inject-attack", { method: "POST" });
+    classificationOffset = 0;
+    await refresh();
+  } catch (error) {
+    errorText.textContent = error.message;
+  } finally {
+    injectAttackButton.disabled = false;
   }
 });
 

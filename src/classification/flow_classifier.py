@@ -161,6 +161,16 @@ class FlowClassifier:
         output_csv: Path | None = None,
     ) -> ClassificationResult:
         df = pd.read_csv(input_csv)
+        return self.classify_dataframe(df, input_name=input_csv, output_csv=output_csv)
+
+    def classify_dataframe(
+        self,
+        dataframe: pd.DataFrame,
+        *,
+        input_name: str | Path = "manual-instance",
+        output_csv: Path | None = None,
+    ) -> ClassificationResult:
+        df = dataframe.copy()
         df.columns = df.columns.str.strip()
         rows_before_filter = len(df)
         df, rows_removed_by_src_ip = self._filter_source_ip(df)
@@ -168,7 +178,7 @@ class FlowClassifier:
         if df.empty:
             self._write_optional_output(df, output_csv)
             return ClassificationResult(
-                input_csv=input_csv,
+                input_csv=Path(input_name),
                 output_csv=output_csv,
                 rows_before_filter=rows_before_filter,
                 rows_removed_by_src_ip=rows_removed_by_src_ip,
@@ -188,7 +198,7 @@ class FlowClassifier:
         if features.empty:
             self._write_optional_output(features, output_csv)
             return ClassificationResult(
-                input_csv=input_csv,
+                input_csv=Path(input_name),
                 output_csv=output_csv,
                 rows_before_filter=rows_before_filter,
                 rows_removed_by_src_ip=rows_removed_by_src_ip,
@@ -217,7 +227,7 @@ class FlowClassifier:
         classified_flows = self._build_classified_flows(df, output_df)
         threat_flows = self._build_threat_flows(df, output_df)
         return ClassificationResult(
-            input_csv=input_csv,
+            input_csv=Path(input_name),
             output_csv=output_csv,
             rows_before_filter=rows_before_filter,
             rows_removed_by_src_ip=rows_removed_by_src_ip,
