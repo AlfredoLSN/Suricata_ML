@@ -124,7 +124,7 @@ function renderClassifications(classifications) {
             <div class="confidence-meter" title="${escapeHtml(formatConfidence(item.prediction_confidence))}">
               <div style="width: ${confidencePercent}%"></div>
             </div>
-            <strong>${formatConfidence(item.prediction_confidence)}</strong>
+            <strong>${formatConfidencePercent(item.prediction_confidence)}</strong>
           </div>
         </td>
       </tr>
@@ -210,6 +210,13 @@ function formatConfidence(value) {
     return "conf. -";
   }
   return `conf. ${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function formatConfidencePercent(value) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
 function formatDate(value) {
