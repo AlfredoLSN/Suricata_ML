@@ -11,6 +11,7 @@ const pcapCount = document.querySelector("#pcapCount");
 const flowCount = document.querySelector("#flowCount");
 const classifiedCount = document.querySelector("#classifiedCount");
 const alertCount = document.querySelector("#alertCount");
+const alertMetric = alertCount.closest("article");
 const predictionCounts = document.querySelector("#predictionCounts");
 const classificationsList = document.querySelector("#classificationsList");
 const classificationPageInfo = document.querySelector("#classificationPageInfo");
@@ -21,6 +22,9 @@ const alertsList = document.querySelector("#alertsList");
 const classificationPageSize = 30;
 let classificationOffset = 0;
 let classificationTotal = 0;
+let lastSeenAlertId = null;
+let audioContext = null;
+let alertAttentionTimeout = null;
 
 const stateLabels = {
   stopped: "parado",
@@ -82,6 +86,7 @@ async function refresh() {
   renderClassifications(classifications);
   renderClassificationPagination(classifications.length);
   renderAlerts(alerts);
+  notifyNewAlerts(alerts);
 }
 
 function renderStatus(status) {
@@ -211,6 +216,105 @@ function renderAlerts(alerts) {
   }
 }
 
+function notifyNewAlerts(alerts) {
+  const maxAlertId = alerts.reduce((maxId, alert) => Math.max(maxId, Number(alert.id) || 0), 0);
+  if (!maxAlertId) {
+    return;
+  }
+  if (lastSeenAlertId === null) {
+    lastSeenAlertId = maxAlertId;
+    return;
+  }
+  if (maxAlertId <= lastSeenAlertId) {
+    return;
+  }
+
+  const newCount = alerts.filter((alert) => Number(alert.id) > lastSeenAlertId).length;
+  lastSeenAlertId = maxAlertId;
+  playAlertSound();
+  showAlertAttention(newCount);
+}
+
+function showAlertAttention(newCount) {
+  alertMetric.classList.add("attention");
+  alertsList.classList.add("attention");
+  showAlertToast(newCount);
+  window.clearTimeout(alertAttentionTimeout);
+  alertAttentionTimeout = window.setTimeout(() => {
+    alertMetric.classList.remove("attention");
+    alertsList.classList.remove("attention");
+  }, 4500);
+}
+
+function showAlertToast(newCount) {
+  let toast = document.querySelector("#alertToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "alertToast";
+    toast.className = "alert-toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = newCount > 1 ? `${newCount} novos alertas detectados` : "Novo alerta detectado";
+  toast.classList.add("visible");
+  window.setTimeout(() => {
+    toast.classList.remove("visible");
+  }, 4200);
+}
+
+function ensureAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+  return audioContext;
+}
+
+function playAlertSound() {
+  const context = ensureAudioContext();
+  if (!context) {
+    return;
+  }
+  const start = context.currentTime;
+  for (let index = 0; index < 8; index += 1) {
+    const rising = index % 2 === 0;
+    playSiren(
+      context,
+      start,
+      index * 0.48,
+      rising ? 720 : 1320,
+      rising ? 1320 : 720
+    );
+  }
+}
+
+function playSiren(context, baseStart, offset, fromFrequency, toFrequency) {
+  const start = baseStart + offset;
+  playTone(context, start, fromFrequency, toFrequency, 0.36, 0.34, "square");
+  playTone(context, start, fromFrequency / 2, toFrequency / 2, 0.36, 0.12, "sawtooth");
+}
+
+function playTone(context, start, fromFrequency, toFrequency, duration, volume, type) {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(fromFrequency, start);
+  oscillator.frequency.linearRampToValueAtTime(toFrequency, start + duration);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(volume, start + 0.03);
+  gain.gain.setValueAtTime(volume, start + duration - 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(start);
+  oscillator.stop(start + duration + 0.02);
+}
+
 function formatPorts(alert) {
   const source = alert.source_port ? `:${alert.source_port}` : "";
   const destination = alert.destination_port ? `:${alert.destination_port}` : "";
@@ -290,6 +394,10 @@ controlForm.addEventListener("submit", async (event) => {
     errorText.textContent = error.message;
   }
 });
+
+document.addEventListener("pointerdown", () => {
+  ensureAudioContext();
+}, { once: true });
 
 pauseButton.addEventListener("click", async () => {
   errorText.textContent = "";
