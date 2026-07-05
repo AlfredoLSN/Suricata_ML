@@ -12,7 +12,14 @@ const classifiedCount = document.querySelector("#classifiedCount");
 const alertCount = document.querySelector("#alertCount");
 const predictionCounts = document.querySelector("#predictionCounts");
 const classificationsList = document.querySelector("#classificationsList");
+const classificationPageInfo = document.querySelector("#classificationPageInfo");
+const classificationPrev = document.querySelector("#classificationPrev");
+const classificationNext = document.querySelector("#classificationNext");
 const alertsList = document.querySelector("#alertsList");
+
+const classificationPageSize = 30;
+let classificationOffset = 0;
+let classificationTotal = 0;
 
 const stateLabels = {
   stopped: "parado",
@@ -56,13 +63,23 @@ async function refresh() {
   const [status, summary, classifications, alerts] = await Promise.all([
     requestJson("/api/pipeline/status"),
     requestJson("/api/results/summary"),
-    requestJson("/api/results/classifications?limit=30"),
+    requestJson(
+      `/api/results/classifications?limit=${classificationPageSize}&offset=${classificationOffset}`
+    ),
     requestJson("/api/alerts?limit=20"),
   ]);
+
+  classificationTotal = status.classification_total || status.classified_count || 0;
+  if (classificationTotal && classificationOffset >= classificationTotal) {
+    classificationOffset = Math.max(0, Math.floor((classificationTotal - 1) / classificationPageSize) * classificationPageSize);
+    await refresh();
+    return;
+  }
 
   renderStatus(status);
   renderSummary(summary);
   renderClassifications(classifications);
+  renderClassificationPagination(classifications.length);
   renderAlerts(alerts);
 }
 
@@ -149,6 +166,20 @@ function renderClassifications(classifications) {
       </table>
     </div>
   `;
+}
+
+function renderClassificationPagination(visibleCount) {
+  if (!classificationTotal) {
+    classificationPageInfo.textContent = "0 de 0";
+    classificationPrev.disabled = true;
+    classificationNext.disabled = true;
+    return;
+  }
+  const start = classificationOffset + 1;
+  const end = Math.min(classificationOffset + visibleCount, classificationTotal);
+  classificationPageInfo.textContent = `${start}-${end} de ${classificationTotal}`;
+  classificationPrev.disabled = classificationOffset === 0;
+  classificationNext.disabled = classificationOffset + classificationPageSize >= classificationTotal;
 }
 
 function renderAlerts(alerts) {
@@ -266,6 +297,23 @@ pauseButton.addEventListener("click", async () => {
   } catch (error) {
     errorText.textContent = error.message;
   }
+});
+
+classificationPrev.addEventListener("click", async () => {
+  classificationOffset = Math.max(0, classificationOffset - classificationPageSize);
+  await refresh().catch((error) => {
+    errorText.textContent = error.message;
+  });
+});
+
+classificationNext.addEventListener("click", async () => {
+  if (classificationOffset + classificationPageSize >= classificationTotal) {
+    return;
+  }
+  classificationOffset += classificationPageSize;
+  await refresh().catch((error) => {
+    errorText.textContent = error.message;
+  });
 });
 
 loadConfig()

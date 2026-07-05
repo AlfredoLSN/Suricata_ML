@@ -109,6 +109,7 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 14px;
 }
 
@@ -167,6 +168,30 @@ button.secondary:hover {
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.icon-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7fafc;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.icon-button:hover {
+  background: #eaf1f7;
 }
 
 .error-text {

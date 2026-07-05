@@ -19,6 +19,7 @@ class PipelineStatusResponse(BaseModel):
     pcap_count: int = 0
     flow_csv_count: int = 0
     classified_count: int = 0
+    classification_total: int = 0
     alert_count: int = 0
     capture_running: bool = False
     extraction_running: bool = False

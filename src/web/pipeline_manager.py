@@ -152,6 +152,7 @@ class PipelineManager:
         with self._lock:
             self._refresh_process_state_locked()
             snapshot = self._copy_snapshot_locked()
+            classification_count = self.alert_store.count_classifications()
             return {
                 "state": snapshot.state,
                 "run_id": snapshot.run_id,
@@ -162,7 +163,8 @@ class PipelineManager:
                 "last_error": snapshot.last_error,
                 "pcap_count": self._count_files(self.paths.capture_dir, "*.pcap"),
                 "flow_csv_count": self._count_files(self.paths.flow_output_dir, "*.csv"),
-                "classified_count": self.alert_store.count_classifications(),
+                "classified_count": classification_count,
+                "classification_total": classification_count,
                 "alert_count": self.alert_store.count_alerts(),
                 "capture_running": self._is_running(self._capture_process),
                 "extraction_running": self._is_running(self._extraction_process),
